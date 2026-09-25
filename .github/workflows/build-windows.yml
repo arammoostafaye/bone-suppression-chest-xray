@@ -1,0 +1,100 @@
+name: Build Windows exe
+
+# Easiest trigger: repo -> Actions -> "Build Windows exe" -> Run workflow.
+# Also runs when something the desktop build depends on changes, and on v* tags
+# (which additionally publish a Release).
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    paths:
+      - "desktop/**"
+      - "app_codespaces.py"
+      - ".devcontainer/requirements-codespaces.txt"
+      - ".github/workflows/build-windows.yml"
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # needed to attach the zip to a Release on tag pushes
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # CPU wheel index first: skips ~2.5 GB of CUDA libraries that a desktop
+      # build without an NVIDIA GPU would never load.
+      - name: Install torch (CPU)
+        run: python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+
+      - name: Install app + packaging deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r .devcontainer/requirements-codespaces.txt
+          python -m pip install pyinstaller pywebview
+
+      # Cheap gate before the slow packaging step: catches a broken dependency
+      # set in ~20 s instead of after a 20-minute PyInstaller run.
+      - name: Smoke-test imports
+        run: >
+          python -c "import torch, gradio, cv2, numpy, PIL, spaces, webview;
+          print('torch', torch.__version__);
+          print('gradio', gradio.__version__);
+          print('cv2', cv2.__version__);
+          print('cuda available:', torch.cuda.is_available())"
+
+      - name: Build with PyInstaller
+        run: pyinstaller desktop/bone_suppression.spec --noconfirm --clean
+
+      - name: Report output
+        shell: pwsh
+        run: |
+          $d = "dist/BoneSuppression"
+          if (-not (Test-Path "$d/BoneSuppression.exe")) { throw "exe was not produced" }
+          $size = (Get-ChildItem $d -Recurse | Measure-Object -Property Length -Sum).Sum
+          "Unpacked size : {0:N0} MB" -f ($size / 1MB)
+          "File count    : {0}" -f (Get-ChildItem $d -Recurse -File).Count
+          "examples dir  : {0}" -f (Test-Path "$d/examples")
+
+      # 7-Zip is preinstalled on the GitHub Windows runners and is far faster
+      # than Compress-Archive on a ~1 GB tree; fall back if it is missing.
+      - name: Zip the build
+        shell: pwsh
+        run: |
+          $out = "BoneSuppression-Windows-x64.zip"
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+            7z a -tzip -mx=5 $out "dist/BoneSuppression/*"
+          } else {
+            Compress-Archive -Path "dist/BoneSuppression/*" -DestinationPath $out
+          }
+          "Zip size: {0:N0} MB" -f ((Get-Item $out).Length / 1MB)
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoneSuppression-Windows-x64
+          path: BoneSuppression-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      # Only on a version tag: publish the zip as a Release asset so it has a
+      # permanent URL (artifacts expire after 90 days).
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BoneSuppression-Windows-x64.zip
+          generate_release_notes: true
