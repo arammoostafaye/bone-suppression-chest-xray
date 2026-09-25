@@ -100,9 +100,16 @@ def main() -> int:
             print(f"[deploy] hardware request failed ({exc}); set it in Space Settings")
 
     url = f"https://huggingface.co/spaces/{repo_id}"
-    print(f"\n[done] Space : {url}")
-    print("[done] PWA    : open it on your phone, then browser menu -> 'Add to Home screen'")
-    print("               (gradio serves /manifest.json + 192/512 icons from desktop/icon.png)")
+    # The installable origin is the DIRECT app host (*.hf.space). The
+    # huggingface.co page embeds the app in an iframe, and Chrome will not show
+    # an install prompt for a document inside an iframe - installing from there
+    # targets the huggingface.co site instead (which is what sent users to the
+    # Play store). *.hf.app no longer resolves in public DNS at all.
+    app_url = f"https://{repo_id.replace('/', '-')}.hf.space/"
+    print(f"\n[done] Space   : {url}")
+    print(f"[done] PWA URL : {app_url}   <-- install from HERE, not the page above")
+    print("[done] install : open that URL on the phone, then browser menu ->")
+    print("                 'Install app' / 'Add to Home screen'")
     return 0
 
 

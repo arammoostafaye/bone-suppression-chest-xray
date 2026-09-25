@@ -331,8 +331,65 @@ with gr.Blocks(title="Bone Suppression — Chest X-ray") as demo:
     )
 
 if __name__ == "__main__":
+    # ---------------------------------------------------------------- PWA bits
+    # gradio's pwa=True serves /manifest.json + 192/512 icons, but Chrome's
+    # installability criteria (still, in 2026) also require a REGISTERED service
+    # worker with a fetch handler. gradio ships none, so we serve a pass-through
+    # one here and register it via launch(js=...), which gradio executes on page
+    # load. The worker never caches: inference is server-side, so an offline
+    # copy would be a dead UI - this SW exists to satisfy installability.
+    SW_JS = """
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (e) => {
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});
+"""
+    REGISTER_SW_JS = (
+        "if ('serviceWorker' in navigator) {"
+        "  window.addEventListener('load', () => {"
+        "    navigator.serviceWorker.register('/sw.js')"
+        "      .catch((e) => console.warn('SW registration failed', e));"
+        "  });"
+        "}"
+    )
+    HEAD = (
+        '<link rel="apple-touch-icon" href="/pwa_icon/192">'
+        '<meta name="theme-color" content="#181c24">'
+        '<meta name="mobile-web-app-capable" content="yes">'
+    )
+
     # Gradio 6 takes `theme` / `css` on launch(), not on the Blocks constructor.
     # pwa=True + favicon_path make the Space installable as a PWA: gradio serves
     # /manifest.json and auto-generates 192/512 PNG icons from the favicon.
-    demo.launch(theme=gr.themes.Citrus(), css=CSS, mcp_server=True,
-                favicon_path=_ICON if os.path.exists(_ICON) else None, pwa=True)
+    # ssr_mode=False is REQUIRED for the PWA: on HF the SSR node server sits in
+    # front of the Python app and answers /sw.js with its own SPA fallback, so
+    # the worker route below would never be reached (verified live).
+    # prevent_thread_lock=True is essential here: launch() blocks forever by
+    # default, which meant the PWA route registration below never ran (found the
+    # hard way - /sw.js 404 on the live Space while it worked locally). The
+    # gradio server keeps running in its own thread; we block the main thread
+    # at the end of this block instead.
+    app, _, _ = demo.launch(theme=gr.themes.Citrus(), css=CSS, mcp_server=True,
+                            favicon_path=_ICON if os.path.exists(_ICON) else None,
+                            pwa=True, js=REGISTER_SW_JS, head=HEAD, ssr_mode=False,
+                            prevent_thread_lock=True)
+
+    # Serve the service worker on the same origin so its scope covers the app.
+    # It MUST be inserted BEFORE gradio's catch-all SPA route: routes are matched
+    # in insertion order, so an append() would always lose to the fallback and
+    # return index.html instead of the worker.
+    from starlette.responses import Response as _Response
+    from starlette.routing import Route as _Route
+
+    async def _service_worker(request):  # noqa: ARG001
+        return _Response(SW_JS, media_type="application/javascript",
+                         headers={"Cache-Control": "no-cache"})
+
+    app.routes.insert(0, _Route("/sw.js", _service_worker))
+
+    print("[startup] PWA: /manifest.json + /pwa_icon/* + /sw.js served", flush=True)
+
+    # The gradio server lives in its own thread now; keep the main thread alive.
+    import threading as _threading
+    _threading.Event().wait()

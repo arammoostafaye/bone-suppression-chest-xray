@@ -45,18 +45,48 @@ see the 402, the Space was created on the wrong flavour — delete it and re-run
 
 ## Install as a PWA
 
-- **Android / Chrome:** open the Space URL → menu ⋮ → *Add to Home screen* /
-  *Install app*.
-- **iOS / Safari:** open the URL → Share → *Add to Home Screen*.
+Install from the **direct app URL**, not from the huggingface.co page:
+
+```
+https://<you>-<space-name>.hf.space/
+```
+
+- **Android / Chrome:** open that URL → menu ⋮ → *Install app* / *Add to Home screen*.
+- **iOS / Safari:** open that URL → Share → *Add to Home Screen*.
 - **Desktop Chrome/Edge:** install icon at the right of the address bar.
 
-The icon comes from `desktop/icon.png`; Gradio derives the 192/512 manifest
-icons from it at runtime (verified: `/manifest.json` returns
-`display: standalone` with both icon sizes).
+### Why the direct URL matters (the iframe trap)
 
-There is intentionally **no service worker / offline mode**: inference runs on
-the Space's GPU, so an offline copy would be a dead UI. The PWA value here is
-installability, the standalone window and the icon.
+`huggingface.co/spaces/<you>/<name>` embeds the app in an **iframe**. Chrome only
+offers the install prompt for the **top-level** document, so installing from the
+huggingface.co page targets the huggingface.co site itself - which is what sends
+Android to the Play store. The `*.hf.space` host is the app's own origin and is
+the one that carries the manifest and service worker. (`*.hf.app` no longer
+resolves in public DNS; do not use it.)
+
+### What makes it installable (all served by the Space, verified live)
+
+| Endpoint | Purpose |
+|---|---|
+| `/manifest.json` | name, `display: standalone`, `start_url`, 192/512 icons |
+| `/pwa_icon/192`, `/pwa_icon/512` | PNG icons auto-derived from `desktop/icon.png` |
+| `/sw.js` | pass-through service worker with a fetch handler - Chrome's installability criteria still require one in 2026 |
+| page JS (via gradio `js`) | registers `/sw.js` on load |
+| page head (via gradio `head`) | `apple-touch-icon`, `theme-color`, `mobile-web-app-capable` for iOS/Android chrome |
+
+Two gradio launch flags are load-bearing for this and are documented in
+`app_space.py`:
+
+- `ssr_mode=False` - on HF the SSR node server sits in front of the Python app
+  and answers `/sw.js` with its own SPA fallback, so the worker route would
+  never be reached.
+- `prevent_thread_lock=True` - `launch()` blocks forever by default, which
+  silently skipped the route registration that follows it.
+
+There is intentionally **no offline caching** in the worker: inference runs on
+the Space's GPU, so an offline copy would be a dead UI. The worker exists to
+satisfy installability and to keep the installed app a real WebAPK rather than a
+bookmark shortcut.
 
 ## Notes
 
