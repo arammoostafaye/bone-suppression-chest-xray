@@ -77,7 +77,13 @@ def main() -> int:
     print(f"[deploy] HF user        : {user}")
     print(f"[deploy] Space          : {repo_id} (private={not args.public})")
 
+    # NOTE: since 2026 a Gradio Space on the free cpu-basic flavour requires a
+    # PRO subscription (HTTP 402). ZeroGPU flavours such as zero-a10g are free
+    # with a daily quota, so the hardware must be requested AT CREATION time -
+    # creating on cpu-basic first and switching later is rejected.
+    hw = None if args.hardware == "none" else args.hardware
     api.create_repo(repo_id, repo_type="space", space_sdk="gradio",
+                    space_hardware=hw,
                     private=not args.public, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="space-") as tmp:

@@ -34,6 +34,15 @@ It creates `<you>/bone-suppression-chest-xray`, uploads the Space layout and
 requests the `zero-a10g` (ZeroGPU) hardware the upstream Space uses. Re-running
 is safe — it just re-uploads.
 
+### Why the hardware is requested AT creation (the 402 trap)
+
+Since 2026, hosting a Gradio or Docker Space on the free `cpu-basic` flavour
+requires an HF **PRO** subscription — creating without a hardware choice fails
+with `HTTP 402 Payment Required`. ZeroGPU flavours (`zero-a10g`) remain free
+with a daily quota, so `deploy_space.py` passes `space_hardware` to
+`create_repo()`. Creating first and switching later is rejected; if you ever
+see the 402, the Space was created on the wrong flavour — delete it and re-run.
+
 ## Install as a PWA
 
 - **Android / Chrome:** open the Space URL → menu ⋮ → *Add to Home screen* /
