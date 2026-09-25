@@ -1,0 +1,12 @@
+# Runtime artefacts from `python app_codespaces.py`
+__pycache__/
+*.py[cod]
+flagged/
+gradio_cached_examples/
+
+# Local virtualenvs
+.venv/
+venv/
+
+# Hugging Face weight cache if it lands inside the repo
+.cache/

@@ -1,0 +1,35 @@
+{
+  "name": "bone-suppression-chest-xray",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+
+  // Personal GitHub accounts get CPU-only Codespaces machines, so this container
+  // runs the demo on CPU via app_codespaces.py (app.py is the untouched GPU/HF build).
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb"
+  },
+
+  // torch is installed from the CPU wheel index first: it keeps the image ~2.5 GB
+  // smaller than the default PyPI (CUDA) build and nothing here needs a GPU.
+  "postCreateCommand": "pip install --index-url https://download.pytorch.org/whl/cpu torch && pip install -r .devcontainer/requirements-codespaces.txt",
+
+  // Downloads the two TorchScript traces (~800 MB) once, at build time, so the app
+  // starts instantly instead of fetching weights on the first click.
+  "postStartCommand": "python -c \"from huggingface_hub import hf_hub_download as d; [d('qureaiorg/bone-suppression', f) for f in ('weights/bone_suppression.ts','weights/lung_component_suppression.ts')]\"",
+
+  "forwardPorts": [7860],
+  "portsAttributes": {
+    "7860": {
+      "label": "Bone Suppression UI",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  },
+
+  "remoteUser": "vscode"
+}
