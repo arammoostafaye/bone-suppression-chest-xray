@@ -63,23 +63,34 @@ jobs:
         shell: pwsh
         run: |
           $d = "dist/BoneSuppression"
+          # PyInstaller 6 puts datas under <name>/_internal, which is also what
+          # sys._MEIPASS points to at runtime - that is where run_desktop.py chdir's.
+          $i = "$d/_internal"
           if (-not (Test-Path "$d/BoneSuppression.exe")) { throw "exe was not produced" }
+          if (-not (Test-Path "$i/examples"))            { throw "examples/ missing from the bundle" }
+          if (-not (Test-Path "$i/desktop/icon.png"))    { throw "favicon missing from the bundle" }
           $size = (Get-ChildItem $d -Recurse | Measure-Object -Property Length -Sum).Sum
           "Unpacked size : {0:N0} MB" -f ($size / 1MB)
           "File count    : {0}" -f (Get-ChildItem $d -Recurse -File).Count
-          "examples dir  : {0}" -f (Test-Path "$d/examples")
+          "examples pngs : {0}" -f (Get-ChildItem "$i/examples" -File).Count
+          "favicon       : OK"
 
       # 7-Zip is preinstalled on the GitHub Windows runners and is far faster
       # than Compress-Archive on a ~1 GB tree; fall back if it is missing.
+      # Zipping from inside dist/ makes the archive unzip to BoneSuppression/
+      # directly instead of dist/BoneSuppression/.
       - name: Zip the build
         shell: pwsh
         run: |
-          $out = "BoneSuppression-Windows-x64.zip"
-          if (Get-Command 7z -ErrorAction SilentlyContinue) {
-            7z a -tzip -mx=5 $out "dist/BoneSuppression/*"
-          } else {
-            Compress-Archive -Path "dist/BoneSuppression/*" -DestinationPath $out
-          }
+          $out = Join-Path (Get-Location) "BoneSuppression-Windows-x64.zip"
+          Push-Location dist
+          try {
+            if (Get-Command 7z -ErrorAction SilentlyContinue) {
+              7z a -tzip -mx=5 $out BoneSuppression
+            } else {
+              Compress-Archive -Path BoneSuppression -DestinationPath $out
+            }
+          } finally { Pop-Location }
           "Zip size: {0:N0} MB" -f ((Get-Item $out).Length / 1MB)
 
       - name: Upload build artifact
