@@ -68,6 +68,23 @@ for _vt in _glob.glob(_os.path.join(_sp, "*", "version.txt")):
     datas.append((_vt, _pkg))
     print("[spec] bundling version.txt for package: %s" % _pkg)
 
+# --- gradio's component_meta.create_or_modify_pyi() re-reads the package's own
+# .py sources at import time (to regenerate .pyi stubs). Frozen builds carry
+# only compiled bytecode, so ship every gradio source file as data too.
+# (collect_data_files/collect_all would NOT help: they skip .py files.)
+import gradio as _gradio
+
+_gdir = _os.path.dirname(_gradio.__file__)
+_groot = _os.path.dirname(_gdir)
+_n = 0
+for _root, _dirs, _files in _os.walk(_gdir):
+    for _fn in _files:
+        if _fn.endswith((".py", ".pyi")):
+            datas.append((_os.path.join(_root, _fn),
+                          _os.path.relpath(_root, _groot)))
+            _n += 1
+print("[spec] bundled %d gradio source files" % _n)
+
 # ---------------------------------------------------------------------------
 # Excludes - trims ~200 MB without touching anything the app imports.
 # sympy is kept: torch imports it. tkinter is kept: harmless and tiny.

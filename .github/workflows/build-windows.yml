@@ -81,6 +81,9 @@ jobs:
           # groovy (gradio dep) reads its version.txt at import too - 2nd
           # occurrence of this bug class in the wild; spec now bundles all of them.
           if (-not (Test-Path "$i/groovy/version.txt")) { throw "groovy/version.txt missing from the bundle" }
+          # gradio re-reads its own .py sources at import (component_meta);
+          # without them the frozen app dies on blocks_events.py (3rd occurrence).
+          if (-not (Test-Path "$i/gradio/blocks_events.py")) { throw "gradio/blocks_events.py missing from the bundle" }
           $size = (Get-ChildItem $d -Recurse | Measure-Object -Property Length -Sum).Sum
           "Unpacked size : {0:N0} MB" -f ($size / 1MB)
           "File count    : {0}" -f (Get-ChildItem $d -Recurse -File).Count
