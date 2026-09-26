@@ -59,6 +59,11 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller desktop/bone_suppression.spec --noconfirm --clean
 
+      # Single-file build: one standalone .exe the user can double-click with
+      # no zip and no manual extraction (self-extracts to %TEMP% at launch).
+      - name: Build onefile exe
+        run: pyinstaller desktop/bone_suppression_onefile.spec --noconfirm
+
       - name: Report output
         shell: pwsh
         run: |
@@ -98,6 +103,15 @@ jobs:
         with:
           name: BoneSuppression-Windows-x64
           path: BoneSuppression-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      # The no-extraction option: a single standalone .exe.
+      - name: Upload onefile exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoneSuppression-exe
+          path: dist/BoneSuppression.exe
           if-no-files-found: error
           retention-days: 90
 
