@@ -15,7 +15,10 @@ datas = [
     (os.path.join(ROOT, "examples"), "examples"),
     (os.path.join(ROOT, "desktop", "icon.png"), os.path.join("desktop")),
 ]
-for pkg in ("gradio", "gradio_client", "hf_gradio", "spaces", "huggingface_hub"):
+# safehttpx reads its own version.txt at import time (FileNotFoundError
+# in frozen builds without it); tzdata is needed by zoneinfo on Windows.
+for pkg in ("gradio", "gradio_client", "hf_gradio", "spaces", "huggingface_hub",
+            "safehttpx", "tzdata"):
     try:
         datas += collect_data_files(pkg)
     except Exception:
