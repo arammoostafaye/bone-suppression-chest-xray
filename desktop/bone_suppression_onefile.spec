@@ -24,6 +24,23 @@ for pkg in ("gradio", "gradio_client", "hf_gradio", "spaces", "huggingface_hub",
     except Exception:
         pass
 
+# --- Generic cure for the "package reads its own version.txt at import time"
+# bug class (bit us twice: safehttpx, then groovy). Scan the build environment
+# for every installed package that ships a top-level version.txt and bundle it,
+# so no future dependency can crash the frozen app this way again.
+import glob as _glob
+import os as _os
+import sys as _sys
+
+_sp = _os.path.join(_sys.prefix, "lib",
+                    "python%d.%d" % _sys.version_info[:2], "site-packages")
+if not _os.path.isdir(_sp):  # Windows layout, just in case
+    _sp = _os.path.join(_sys.prefix, "Lib", "site-packages")
+for _vt in _glob.glob(_os.path.join(_sp, "*", "version.txt")):
+    _pkg = _os.path.basename(_os.path.dirname(_vt))
+    datas.append((_vt, _pkg))
+    print("[spec] bundling version.txt for package: %s" % _pkg)
+
 icon_path = os.path.join(ROOT, "desktop", "icon.ico")
 icon = icon_path if os.path.exists(icon_path) else None
 
