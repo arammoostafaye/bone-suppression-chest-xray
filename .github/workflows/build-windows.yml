@@ -70,34 +70,64 @@ jobs:
           BSP_HEADLESS: "1"
         run: |
           $ErrorActionPreference = "Stop"
-          function Wait-Ui([int]$port, [int]$minutes, $proc) {
+          # Defender real-time scanning makes onefile self-extraction (~700 MB of
+          # tiny files) take 10+ min on shared runners; exclude our own paths.
+          try {
+            Add-MpPreference -ExclusionPath "$PWD" | Out-Null
+            Add-MpPreference -ExclusionPath $env:TEMP | Out-Null
+            Write-Host "defender exclusions added"
+          } catch { Write-Host "defender exclusion skipped: $_" }
+          function Show-Progress($tag, $sw, $proc) {
+            $listen = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+              Where-Object { $_.LocalAddress -eq "127.0.0.1" -or $_.LocalAddress -eq "0.0.0.0" } |
+              Select-Object -ExpandProperty LocalPort -Unique | Sort-Object
+            Write-Host ("{0} t={1:N0}s alive={2} cpu={3:N0}s listening=[{4}]" -f
+              $tag, $sw.Elapsed.TotalSeconds, (-not $proc.HasExited),
+              $proc.TotalProcessorTime.TotalSeconds, ($listen -join ","))
+          }
+          function Wait-Ui([int]$port, [int]$minutes, $proc, [string]$tag, [string]$logpath) {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $deadline = (Get-Date).AddMinutes($minutes)
             while ((Get-Date) -lt $deadline) {
-              if ($proc -and $proc.HasExited) { throw "exe exited early (code $($proc.ExitCode))" }
+              if ($proc.HasExited) {
+                Write-Host "$tag exited early (code $($proc.ExitCode)); log tail:"
+                Get-Content $logpath -Tail 60 -ErrorAction SilentlyContinue
+                throw "$tag exited early (code $($proc.ExitCode))"
+              }
               try {
                 $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "http://127.0.0.1:$port/"
                 if ($r.StatusCode -eq 200) { return $r }
               } catch { }
-              Start-Sleep -Seconds 5
+              Start-Sleep -Seconds 30
+              Show-Progress $tag $sw $proc
             }
+            Write-Host "$tag TIMED OUT; log tail:"
+            Get-Content $logpath -Tail 60 -ErrorAction SilentlyContinue
+            Show-Progress $tag $sw $proc
             throw "no UI on port $port within $minutes min"
           }
           # --- onefile: the exact single file users double-click
           $env:BSP_PORT = "7861"
           $p1 = Start-Process -FilePath "dist\BoneSuppression.exe" -PassThru
           try {
-            $r = Wait-Ui 7861 12 $p1
+            $r = Wait-Ui 7861 18 $p1 "ONEFILE" "$PWD\dist\bone-suppression.log"
             Write-Host "ONEFILE UI: HTTP $($r.StatusCode), $($r.Content.Length) bytes of HTML"
             $c = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:7861/config"
             Write-Host "ONEFILE /config: HTTP $($c.StatusCode), $($c.Content.Length) bytes"
-          } finally { taskkill /F /T /PID $p1.Id | Out-Null }
+          } finally {
+            taskkill /F /T /PID $p1.Id | Out-Null
+            Get-Content "$PWD\dist\bone-suppression.log" -Tail 25 -ErrorAction SilentlyContinue
+          }
           # --- onedir: the layout inside the zip
           $env:BSP_PORT = "7862"
           $p2 = Start-Process -FilePath "dist\BoneSuppression\BoneSuppression.exe" -PassThru
           try {
-            $r = Wait-Ui 7862 8 $p2
+            $r = Wait-Ui 7862 10 $p2 "ONEDIR" "$PWD\dist\BoneSuppression\bone-suppression.log"
             Write-Host "ONEDIR UI: HTTP $($r.StatusCode), $($r.Content.Length) bytes of HTML"
-          } finally { taskkill /F /T /PID $p2.Id | Out-Null }
+          } finally {
+            taskkill /F /T /PID $p2.Id | Out-Null
+            Get-Content "$PWD\dist\BoneSuppression\bone-suppression.log" -Tail 25 -ErrorAction SilentlyContinue
+          }
           Write-Host "BOOT TEST PASSED: both frozen exes started and served the UI"
 
       - name: Report output
