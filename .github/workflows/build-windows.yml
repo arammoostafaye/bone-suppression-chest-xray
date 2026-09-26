@@ -98,8 +98,8 @@ jobs:
           Write-Host "UI: HTTP $($r.StatusCode), $($r.Content.Length) bytes of HTML after $([int]$sw.Elapsed.TotalSeconds)s"
           $c = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:7863/config"
           Write-Host "/config: HTTP $($c.StatusCode), $($c.Content.Length) bytes"
-          $api = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 -Method Post -ContentType "application/json" -Body "{}" "http://127.0.0.1:7863/gradio_api/decompose?fn_index=0" -ErrorAction SilentlyContinue
-          Write-Host "api probe status: $($api.StatusCode)"
+          # Real end-to-end inference on Windows CPU with a bundled example
+          python -c "import app_codespaces as a; r=a.decompose('examples/cxr_train_16_a_2.png'); print('INFERENCE OK on windows-latest:', len(r), 'outputs')"
           taskkill /F /T /PID $p.Id | Out-Null
           Write-Host "RUN TEST PASSED on windows-latest"
 
