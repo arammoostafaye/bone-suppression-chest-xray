@@ -65,6 +65,41 @@ jobs:
       - name: Build onefile exe
         run: pyinstaller desktop/bone_suppression_onefile.spec --noconfirm
 
+      - name: Boot-test the frozen exes (headless Windows)
+        env:
+          BSP_HEADLESS: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          function Wait-Ui([int]$port, [int]$minutes, $proc) {
+            $deadline = (Get-Date).AddMinutes($minutes)
+            while ((Get-Date) -lt $deadline) {
+              if ($proc -and $proc.HasExited) { throw "exe exited early (code $($proc.ExitCode))" }
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "http://127.0.0.1:$port/"
+                if ($r.StatusCode -eq 200) { return $r }
+              } catch { }
+              Start-Sleep -Seconds 5
+            }
+            throw "no UI on port $port within $minutes min"
+          }
+          # --- onefile: the exact single file users double-click
+          $env:BSP_PORT = "7861"
+          $p1 = Start-Process -FilePath "dist\BoneSuppression.exe" -PassThru
+          try {
+            $r = Wait-Ui 7861 12 $p1
+            Write-Host "ONEFILE UI: HTTP $($r.StatusCode), $($r.Content.Length) bytes of HTML"
+            $c = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 "http://127.0.0.1:7861/config"
+            Write-Host "ONEFILE /config: HTTP $($c.StatusCode), $($c.Content.Length) bytes"
+          } finally { taskkill /F /T /PID $p1.Id | Out-Null }
+          # --- onedir: the layout inside the zip
+          $env:BSP_PORT = "7862"
+          $p2 = Start-Process -FilePath "dist\BoneSuppression\BoneSuppression.exe" -PassThru
+          try {
+            $r = Wait-Ui 7862 8 $p2
+            Write-Host "ONEDIR UI: HTTP $($r.StatusCode), $($r.Content.Length) bytes of HTML"
+          } finally { taskkill /F /T /PID $p2.Id | Out-Null }
+          Write-Host "BOOT TEST PASSED: both frozen exes started and served the UI"
+
       - name: Report output
         shell: pwsh
         run: |
