@@ -80,6 +80,9 @@ def wait_ready(port: int, timeout: float = 120.0) -> bool:
 
 def show_native_window(url: str) -> bool:
     """Open a frameless-ish native window. Returns False if pywebview is unusable."""
+    if os.environ.get("BSP_HEADLESS") == "1":
+        log.info("BSP_HEADLESS=1: skipping the native window (headless smoke test)")
+        return False
     try:
         import webview  # pywebview; on Windows this is Edge WebView2
     except Exception as exc:  # pragma: no cover - depends on the bundle
