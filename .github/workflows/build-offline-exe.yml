@@ -32,7 +32,9 @@ jobs:
           mkdir -p offline_package/weights
           curl -L --retry 3 -o offline_package/weights/bone_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/bone_suppression.ts
           curl -L --retry 3 -o offline_package/weights/lung_component_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/lung_component_suppression.ts
-          ls -la offline_package/weights
+          Get-ChildItem offline_package/weights | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
+          if ((Get-Item offline_package/weights/bone_suppression.ts).Length -lt 400000000) { throw "bone weights incomplete" }
+          if ((Get-Item offline_package/weights/lung_component_suppression.ts).Length -lt 400000000) { throw "lung weights incomplete" }
 
       - name: Build with PyInstaller (package flags, verbatim)
         run: |
