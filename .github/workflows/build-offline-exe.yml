@@ -71,7 +71,7 @@ jobs:
           tar -czf ../../BoneSuppressionAI-offline.tar.gz BoneSuppressionAI
           cd ../..
           certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
-          ls -la BoneSuppressionAI-offline.tar.gz
+          Get-Item BoneSuppressionAI-offline.tar.gz | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
