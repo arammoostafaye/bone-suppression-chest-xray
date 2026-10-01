@@ -1,0 +1,83 @@
+# Builds the tkinter-based offline workstation from offline_package/ exactly as
+# the user-supplied "BoneSuppression_Windows_Offline_Package" prescribes:
+#   pyinstaller --onedir --windowed --add-data weights;weights --add-data config.json;.
+#               --collect-all torch --collect-all cv2 BoneSuppression_Desktop.py
+# Weights are bundled INSIDE the app dir => the result runs 100% offline.
+name: build-offline-exe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (torch CPU wheel + app libs only)
+        run: |
+          python -m pip install --upgrade pip
+          # CPU wheel on purpose: the CUDA wheels add ~2.5 GB of unused DLLs.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install "opencv-python-headless>=4.8" "numpy>=1.24" "Pillow>=10" "pydicom>=2.4" pyinstaller
+          # NOTE: torchvision/gradio from the package requirements are not
+          # imported by BoneSuppression_Desktop.py, so they are skipped here.
+
+      - name: Download model weights (bundled into the app for offline use)
+        run: |
+          mkdir -p offline_package/weights
+          curl -L --retry 3 -o offline_package/weights/bone_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/bone_suppression.ts
+          curl -L --retry 3 -o offline_package/weights/lung_component_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/lung_component_suppression.ts
+          ls -la offline_package/weights
+
+      - name: Build with PyInstaller (package flags, verbatim)
+        run: |
+          cd offline_package
+          pyinstaller --noconfirm --onedir --windowed ^
+            --name "BoneSuppressionAI" ^
+            --add-data "weights;weights" ^
+            --add-data "config.json;." ^
+            --collect-all torch ^
+            --collect-all cv2 ^
+            BoneSuppression_Desktop.py
+
+      - name: Verify bundle + model smoke test
+        run: |
+          $ErrorActionPreference = "Stop"
+          $d = "offline_package\dist\BoneSuppressionAI"
+          $i = "$d\_internal"
+          if (-not (Test-Path "$d\BoneSuppressionAI.exe")) { throw "exe missing" }
+          if (-not (Test-Path "$i\weights\bone_suppression.ts")) { throw "bone weights not bundled" }
+          if (-not (Test-Path "$i\weights\lung_component_suppression.ts")) { throw "lung weights not bundled" }
+          if (-not (Get-ChildItem $i -Recurse -Filter "tcl86t.dll" -ErrorAction SilentlyContinue)) { throw "tcl/tk runtime missing (tkinter UI would not start)" }
+          python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop; print('APP IMPORT OK')"
+          @'
+          import torch
+          b = torch.jit.load("offline_package/weights/bone_suppression.ts", map_location="cpu").eval()
+          l = torch.jit.load("offline_package/weights/lung_component_suppression.ts", map_location="cpu").eval()
+          x = torch.rand(1, 1, 1024, 1024)
+          with torch.no_grad():
+              bo = b(x); bo = bo[0] if isinstance(bo, (list, tuple)) else bo
+              soft = x - bo
+              lu = l(soft); lu = lu[0] if isinstance(lu, (list, tuple)) else lu
+          print("MODEL SMOKE OK", tuple(bo.shape), tuple(lu.shape))
+          '@ | Set-Content probe.py
+          python probe.py
+
+      - name: Pack tar.gz
+        run: |
+          cd offline_package/dist
+          tar -czf ../../BoneSuppressionAI-offline.tar.gz BoneSuppressionAI
+          cd ../..
+          certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
+          ls -la BoneSuppressionAI-offline.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoneSuppressionAI-offline
+          path: BoneSuppressionAI-offline.tar.gz
