@@ -3,7 +3,7 @@ BoneSuppression AI - Clinical Chest Radiograph Workstation
 Native Offline Windows Desktop Application
 Based on Qure.ai CT2XR Research (arXiv:2609.24937)
 
-Developer / بسته‌بندی و توسعه دسکتاپ:
+Developer / توسعه و آماده‌سازی نسخه دسکتاپ ویندوز:
 آرام مصطفائی (Aram Mostafaei)
 پرسنل واحد امور تصویربرداری بیمارستان بوعلی - شبکه بهداشت و درمان مریوان
 
@@ -20,32 +20,63 @@ import sys
 import time
 import json
 import hashlib
+import traceback
 import numpy as np
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from PIL import Image, ImageTk, ImageOps
+from PIL import Image, ImageTk
 
-# Check PyTorch availability
+# Safe import PyTorch
 try:
     import torch
 except ImportError:
     torch = None
 
+# Safe import OpenCV
 try:
     import cv2
 except ImportError:
     cv2 = None
 
+# Safe import pydicom
 try:
     import pydicom
 except ImportError:
     pydicom = None
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(HERE, "config.json")
-WEIGHTS_DIR = os.path.join(HERE, "weights")
-BONE_WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "bone_suppression.ts")
-LUNG_WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "lung_component_suppression.ts")
+# Determine base paths robustly (supports normal python, PyInstaller onedir, and PyInstaller onefile)
+if getattr(sys, 'frozen', False):
+    EXE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+    BUNDLE_DIR = getattr(sys, '_MEIPASS', EXE_DIR)
+    SEARCH_DIRS = [
+        BUNDLE_DIR,
+        EXE_DIR,
+        os.path.join(BUNDLE_DIR, "_internal"),
+        os.path.join(EXE_DIR, "_internal"),
+        os.getcwd()
+    ]
+else:
+    EXE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BUNDLE_DIR = EXE_DIR
+    SEARCH_DIRS = [
+        BUNDLE_DIR,
+        os.getcwd()
+    ]
+
+def locate_resource(rel_path):
+    """Finds a resource relative path across all potential bundle locations."""
+    for base in SEARCH_DIRS:
+        if not base:
+            continue
+        p = os.path.join(base, rel_path)
+        if os.path.exists(p):
+            return p
+    # Fallback to bundle or exe dir
+    return os.path.join(BUNDLE_DIR, rel_path)
+
+CONFIG_PATH = locate_resource("config.json")
+BONE_WEIGHTS_PATH = locate_resource(os.path.join("weights", "bone_suppression.ts"))
+LUNG_WEIGHTS_PATH = locate_resource(os.path.join("weights", "lung_component_suppression.ts"))
 SIZE = 1024
 
 # Default credentials (boalimri.ir / aram)
@@ -69,6 +100,7 @@ C_BG_DARK = "#0a0f1d"       # Deep canvas & window base
 C_BG_HEADER = "#111827"     # Top header bar
 C_BG_TOOLBAR = "#1e293b"    # Action toolbar
 C_BG_BOTTOM = "#0f172a"     # Bottom bar
+C_CARD_BG = "#131d31"       # Modal / card background
 C_BORDER = "#334155"        # Subtle card/panel border
 C_TEXT_LIGHT = "#f8fafc"    # Bright text
 C_TEXT_MUTED = "#94a3b8"    # Subtle secondary text
@@ -99,135 +131,6 @@ def create_modern_button(parent, text, command, bg, hover_bg, fg="white",
     return btn
 
 
-class LoginDialog(tk.Toplevel):
-    """Modern clinical login dialog protecting application access."""
-    def __init__(self, parent, on_success):
-        super().__init__(parent)
-        self.parent = parent
-        self.on_success = on_success
-
-        self.title("ورود به سامانه | بیمارستان بوعلی مریوان")
-        self.geometry("450x510")
-        self.resizable(False, False)
-        self.configure(bg=C_BG_DARK)
-
-        # Center on screen
-        self.update_idletasks()
-        w = 450
-        h = 510
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
-
-        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
-        self.init_ui()
-
-        # Keyboard shortcuts
-        self.bind("<Return>", self.on_login)
-        self.bind("<Escape>", lambda e: self.on_cancel())
-
-        # Modal grab
-        self.transient(parent)
-        self.grab_set()
-        self.entry_user.focus_set()
-
-    def init_ui(self):
-        # Outer card container
-        card = tk.Frame(self, bg=C_BG_HEADER, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        card.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-
-        # Hospital & App Header
-        tk.Label(card, text="🏥", font=("Segoe UI", 30), bg=C_BG_HEADER, fg=C_CYAN).pack(pady=(16, 2))
-        tk.Label(card, text=HOSPITAL_TITLE, font=("Segoe UI", 12, "bold"), fg=C_TEXT_LIGHT, bg=C_BG_HEADER).pack()
-        tk.Label(card, text=f"{NETWORK_TITLE} - واحد امور تصویربرداری", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_BG_HEADER).pack(pady=(2, 8))
-
-        # Divider
-        div = tk.Frame(card, bg=C_BORDER, height=1)
-        div.pack(fill=tk.X, padx=20, pady=4)
-
-        tk.Label(card, text="🫁 BoneSuppression AI", font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_BG_HEADER).pack(pady=(6, 2))
-        tk.Label(card, text="جهت ورود به سامانه، مشخصات خود را وارد نمایید", font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_BG_HEADER).pack(pady=(0, 14))
-
-        # Form fields container
-        form = tk.Frame(card, bg=C_BG_HEADER)
-        form.pack(fill=tk.X, padx=28)
-
-        # Username
-        tk.Label(form, text="نام کاربری (Username):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_BG_HEADER, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
-        self.entry_user = tk.Entry(form, font=("Segoe UI", 10), bg="#0b0f19", fg="white",
-                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
-        self.entry_user.pack(fill=tk.X, ipady=6, pady=(0, 8))
-
-        # Password
-        tk.Label(form, text="رمز عبور (Password):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_BG_HEADER, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
-        self.entry_pass = tk.Entry(form, font=("Segoe UI", 10), show="•", bg="#0b0f19", fg="white",
-                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
-        self.entry_pass.pack(fill=tk.X, ipady=6, pady=(0, 4))
-
-        # Error label
-        self.err_label = tk.Label(form, text="", font=("Segoe UI", 8, "bold"), fg=C_RED_HOVER, bg=C_BG_HEADER)
-        self.err_label.pack(fill=tk.X, pady=(2, 4))
-
-        # Action Buttons
-        btn_box = tk.Frame(card, bg=C_BG_HEADER)
-        btn_box.pack(fill=tk.X, padx=28, pady=(4, 10))
-
-        btn_login = create_modern_button(btn_box, "✓ ورود به سامانه", self.on_login,
-                                         bg=C_GREEN, hover_bg=C_GREEN_HOVER,
-                                         font=("Segoe UI", 10, "bold"), pady=7)
-        btn_login.pack(fill=tk.X, pady=(0, 6))
-
-        btn_exit = create_modern_button(btn_box, "انصراف و خروج", self.on_cancel,
-                                        bg=C_SLATE, hover_bg=C_SLATE_HOVER,
-                                        font=("Segoe UI", 9), pady=5)
-        btn_exit.pack(fill=tk.X)
-
-        # Footer credit
-        tk.Label(card, text="توسعه و آماده‌سازی: آرام مصطفائی", font=("Segoe UI", 8), fg=C_TEXT_DIM, bg=C_BG_HEADER).pack(side=tk.BOTTOM, pady=6)
-
-    def check_credentials(self, username, password):
-        u = username.strip().lower()
-        p = password.strip()
-
-        # Check against default credentials
-        if u == DEFAULT_USER.lower() and (p == DEFAULT_PASS or hashlib.sha256(p.encode()).hexdigest() == DEFAULT_PASS_HASH):
-            return True
-
-        # Also check against config.json if customized
-        if os.path.exists(CONFIG_PATH):
-            try:
-                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                    cfg = json.load(f)
-                auth = cfg.get("auth", {})
-                cfg_u = auth.get("username", "").strip().lower()
-                cfg_p = auth.get("initial_password_plain", "")
-                cfg_h = auth.get("password_hash", "")
-                if cfg_u and u == cfg_u:
-                    if p == cfg_p or hashlib.sha256(p.encode()).hexdigest() == cfg_h:
-                        return True
-            except Exception:
-                pass
-
-        return False
-
-    def on_login(self, event=None):
-        u = self.entry_user.get()
-        p = self.entry_pass.get()
-        if self.check_credentials(u, p):
-            self.destroy()
-            self.on_success()
-        else:
-            self.err_label.config(text="❌ نام کاربری یا رمز عبور اشتباه است!")
-            self.entry_pass.delete(0, tk.END)
-            self.entry_pass.focus_set()
-
-    def on_cancel(self):
-        self.parent.destroy()
-        sys.exit(0)
-
-
 class AboutDialog(tk.Toplevel):
     """Detailed clinical and project description modal with developer and source attribution."""
     def __init__(self, parent):
@@ -249,6 +152,8 @@ class AboutDialog(tk.Toplevel):
 
         self.transient(parent)
         self.init_ui()
+        self.lift()
+        self.focus_force()
 
     def init_ui(self):
         # Header banner
@@ -287,7 +192,7 @@ class AboutDialog(tk.Toplevel):
         text_widget.tag_configure("credit", font=("Segoe UI", 9), foreground="#38bdf8")
         text_widget.tag_configure("body", font=("Segoe UI", 10), foreground="#e2e8f0", spacing1=4, spacing3=4)
 
-        # Full verbatim content
+        # Verbatim developer text
         text_widget.insert(tk.END, "درباره نرم‌افزار Bone Suppression Chest X-ray\n\n", "h1")
 
         text_widget.insert(tk.END,
@@ -353,16 +258,21 @@ class AboutDialog(tk.Toplevel):
 
 
 class BoneSuppressionApp(tk.Tk):
-    """BoneSuppression AI Desktop Workstation with modernized UI and hospital branding."""
+    """BoneSuppression AI Desktop Workstation with modernized UI, hospital branding, and built-in login."""
     def __init__(self):
         super().__init__()
-        # Hide root until login succeeds
-        self.withdraw()
-
         self.title("BoneSuppression AI - Chest X-Ray Studio | بیمارستان بوعلی مریوان")
-        self.geometry("1300x870")
+        self.geometry("1280x850")
         self.minsize(1050, 720)
         self.configure(bg=C_BG_DARK)
+
+        # Center main window on launch
+        self.update_idletasks()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = max(0, (sw - 1280) // 2)
+        y = max(0, (sh - 850) // 2)
+        self.geometry(f"1280x850+{x}+{y}")
 
         self.current_image_path = None
         self.original_np = None
@@ -380,32 +290,137 @@ class BoneSuppressionApp(tk.Tk):
         self.auto_invert_var = tk.BooleanVar(value=True)
         self.slider_pos = tk.DoubleVar(value=0.5)
 
-        self.init_ui()
+        # Initialize both containers inside the main window
+        self.main_container = tk.Frame(self, bg=C_BG_DARK)
+        self.login_container = tk.Frame(self, bg=C_BG_DARK)
+
+        self.init_workstation_ui()
+        self.init_login_ui()
+
+        # Start with the login view
+        self.show_login_view()
+
+    def show_login_view(self):
+        """Displays the embedded login card and hides the workstation."""
+        self.main_container.pack_forget()
+        self.login_container.pack(fill=tk.BOTH, expand=True)
+        self.entry_pass.delete(0, tk.END)
+        self.err_label.config(text="")
+        self.entry_user.focus_set()
+
+    def show_workstation_view(self):
+        """Displays the workstation interface upon successful login."""
+        self.login_container.pack_forget()
+        self.main_container.pack(fill=tk.BOTH, expand=True)
         self.check_models()
-
-        # Prompt for authentication
-        self.show_login()
-
-    def show_login(self):
-        LoginDialog(self, on_success=self.on_login_success)
-
-    def on_login_success(self):
-        self.deiconify()
-        self.lift()
-        self.focus_force()
         self.render_view()
+
+    def check_credentials(self, username, password):
+        u = username.strip().lower()
+        p = password.strip()
+
+        # Check default hardcoded credentials
+        if u == DEFAULT_USER.lower() and (p == DEFAULT_PASS or hashlib.sha256(p.encode()).hexdigest() == DEFAULT_PASS_HASH):
+            return True
+
+        # Check optional config.json override
+        if os.path.exists(CONFIG_PATH):
+            try:
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                auth = cfg.get("auth", {})
+                cfg_u = auth.get("username", "").strip().lower()
+                cfg_p = auth.get("initial_password_plain", "")
+                cfg_h = auth.get("password_hash", "")
+                if cfg_u and u == cfg_u:
+                    if p == cfg_p or hashlib.sha256(p.encode()).hexdigest() == cfg_h:
+                        return True
+            except Exception:
+                pass
+
+        return False
+
+    def on_login_attempt(self, event=None):
+        u = self.entry_user.get()
+        p = self.entry_pass.get()
+        if self.check_credentials(u, p):
+            self.show_workstation_view()
+        else:
+            self.err_label.config(text="❌ نام کاربری یا رمز عبور اشتباه است!")
+            self.entry_pass.delete(0, tk.END)
+            self.entry_pass.focus_set()
 
     def on_logout(self):
         if messagebox.askyesno("خروج از سامانه", "آیا می‌خواهید از سامانه خارج شوید؟"):
-            self.withdraw()
-            self.show_login()
+            self.show_login_view()
+
+    def init_login_ui(self):
+        """Constructs the modern clinical login card inside login_container."""
+        center_box = tk.Frame(self.login_container, bg=C_BG_DARK)
+        center_box.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+        # Login Card Container
+        card = tk.Frame(center_box, bg=C_CARD_BG, bd=1, relief=tk.SOLID,
+                        highlightbackground=C_BORDER, highlightthickness=1, padx=36, pady=28)
+        card.pack()
+
+        # Hospital & Clinical Header
+        tk.Label(card, text="🏥", font=("Segoe UI", 36), bg=C_CARD_BG, fg=C_CYAN).pack(pady=(4, 2))
+        tk.Label(card, text=HOSPITAL_TITLE, font=("Segoe UI", 14, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD_BG).pack()
+        tk.Label(card, text=f"{NETWORK_TITLE} - {DEVELOPER_ROLE}", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_CARD_BG).pack(pady=(2, 10))
+
+        # Thin divider
+        tk.Frame(card, bg=C_BORDER, height=1, width=380).pack(pady=4)
+
+        tk.Label(card, text="🫁 BoneSuppression AI - ورود به سامانه", font=("Segoe UI", 12, "bold"), fg=C_CYAN, bg=C_CARD_BG).pack(pady=(8, 2))
+        tk.Label(card, text="سامانه هوشمند جداسازی استخوان در رادیوگرافی قفسه سینه", font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD_BG).pack(pady=(0, 16))
+
+        # Inputs Form
+        form = tk.Frame(card, bg=C_CARD_BG, width=360)
+        form.pack(fill=tk.X)
+
+        # Username
+        tk.Label(form, text="نام کاربری (Username):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD_BG, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
+        self.entry_user = tk.Entry(form, font=("Segoe UI", 10), bg="#0b0f19", fg="white",
+                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
+        self.entry_user.pack(fill=tk.X, ipady=6, pady=(0, 10))
+        self.entry_user.insert(0, DEFAULT_USER)
+
+        # Password
+        tk.Label(form, text="رمز عبور (Password):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD_BG, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
+        self.entry_pass = tk.Entry(form, font=("Segoe UI", 10), show="•", bg="#0b0f19", fg="white",
+                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
+        self.entry_pass.pack(fill=tk.X, ipady=6, pady=(0, 6))
+
+        # Error label
+        self.err_label = tk.Label(form, text="", font=("Segoe UI", 9, "bold"), fg=C_RED_HOVER, bg=C_CARD_BG)
+        self.err_label.pack(fill=tk.X, pady=(2, 6))
+
+        # Actions
+        btn_box = tk.Frame(card, bg=C_CARD_BG)
+        btn_box.pack(fill=tk.X, pady=(6, 12))
+
+        btn_login = create_modern_button(btn_box, "✓ ورود به سامانه", self.on_login_attempt,
+                                         bg=C_GREEN, hover_bg=C_GREEN_HOVER,
+                                         font=("Segoe UI", 10, "bold"), pady=8)
+        btn_login.pack(fill=tk.X, pady=(0, 8))
+
+        # Enter key triggers login from anywhere in card
+        self.entry_user.bind("<Return>", self.on_login_attempt)
+        self.entry_pass.bind("<Return>", self.on_login_attempt)
+
+        # Creator credit footer
+        footer = tk.Frame(card, bg=C_CARD_BG)
+        footer.pack(fill=tk.X, pady=(8, 0))
+        tk.Label(footer, text=f"توسعه و آماده‌سازی دسکتاپ: {DEVELOPER_NAME}", font=("Segoe UI", 8), fg=C_TEXT_DIM, bg=C_CARD_BG).pack()
+        tk.Label(footer, text="بر پایه الگوریتم هوش مصنوعی Qure.ai (CC BY-NC-SA 4.0)", font=("Segoe UI", 7), fg=C_TEXT_DIM, bg=C_CARD_BG).pack()
 
     def check_models(self):
         has_bone = os.path.exists(BONE_WEIGHTS_PATH)
         has_lung = os.path.exists(LUNG_WEIGHTS_PATH)
 
         if not has_bone or not has_lung:
-            self.status_label.config(text="⚠ هشدار: وزن‌های مدل در پوشه weights یافت نشدند", fg=C_AMBER)
+            self.status_label.config(text="⚠ هشدار: فایل‌های وزن مدل در مسیر weights یافت نشدند", fg=C_AMBER)
         else:
             size_mb = (os.path.getsize(BONE_WEIGHTS_PATH) + os.path.getsize(LUNG_WEIGHTS_PATH)) / (1024 * 1024)
             self.status_label.config(
@@ -417,10 +432,10 @@ class BoneSuppressionApp(tk.Tk):
         if self.bone_model is not None:
             return True
         if not torch:
-            messagebox.showerror("خطا", "کتابخانه PyTorch در این محیط نصب نیست.")
+            messagebox.showerror("خطا", "کتابخانه PyTorch در این محیط بارگذاری نشده است.")
             return False
         if not os.path.exists(BONE_WEIGHTS_PATH):
-            messagebox.showerror("وزن‌های مدل یافت نشد", "لطفاً ابتدا فایل‌های مدل را در پوشه weights قرار دهید.")
+            messagebox.showerror("وزن‌های مدل یافت نشد", f"لطفاً فایل‌های مدل را در پوشه weights قرار دهید:\n{BONE_WEIGHTS_PATH}")
             return False
 
         try:
@@ -437,9 +452,10 @@ class BoneSuppressionApp(tk.Tk):
             self.status_label.config(text=f"خطا در بارگذاری مدل: {e}", fg=C_RED_HOVER)
             return False
 
-    def init_ui(self):
+    def init_workstation_ui(self):
+        """Constructs the full medical workstation UI inside main_container."""
         # Top Header Bar (Branding & Identity)
-        header_bar = tk.Frame(self, bg=C_BG_HEADER, height=42, bd=0)
+        header_bar = tk.Frame(self.main_container, bg=C_BG_HEADER, height=42, bd=0)
         header_bar.pack(fill=tk.X, side=tk.TOP)
 
         # Brand / Title (Left)
@@ -450,7 +466,7 @@ class BoneSuppressionApp(tk.Tk):
         tk.Label(brand_frame, text=" | ", font=("Segoe UI", 11), fg=C_BORDER, bg=C_BG_HEADER).pack(side=tk.LEFT)
         tk.Label(brand_frame, text=f"{HOSPITAL_TITLE} - {DEVELOPER_NAME}", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_BG_HEADER).pack(side=tk.LEFT)
 
-        # User Badge & Utility Buttons (Right)
+        # Right header buttons (User badge, About, Logout)
         right_header = tk.Frame(header_bar, bg=C_BG_HEADER)
         right_header.pack(side=tk.RIGHT, padx=12, pady=6)
 
@@ -471,11 +487,11 @@ class BoneSuppressionApp(tk.Tk):
         btn_logout.pack(side=tk.LEFT, padx=4)
 
         # Thin divider between header and action toolbar
-        div_bar = tk.Frame(self, bg=C_BORDER, height=1)
+        div_bar = tk.Frame(self.main_container, bg=C_BORDER, height=1)
         div_bar.pack(fill=tk.X, side=tk.TOP)
 
         # Action Toolbar (Primary Workstation Tools)
-        toolbar = tk.Frame(self, bg=C_BG_TOOLBAR, height=48)
+        toolbar = tk.Frame(self.main_container, bg=C_BG_TOOLBAR, height=48)
         toolbar.pack(fill=tk.X, side=tk.TOP, padx=0, pady=0)
 
         # Primary action buttons
@@ -510,7 +526,7 @@ class BoneSuppressionApp(tk.Tk):
         self.dev_combo.bind("<<ComboboxSelected>>", self.on_device_change)
 
         # Main viewport / DICOM canvas
-        self.canvas_frame = tk.Frame(self, bg=C_BG_DARK, bd=0)
+        self.canvas_frame = tk.Frame(self.main_container, bg=C_BG_DARK, bd=0)
         self.canvas_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 4))
 
         self.canvas = tk.Canvas(self.canvas_frame, bg="#000000", highlightthickness=1,
@@ -521,7 +537,7 @@ class BoneSuppressionApp(tk.Tk):
         self.canvas.bind("<Configure>", self.on_resize)
 
         # Bottom control & status bar
-        bottom_bar = tk.Frame(self, bg=C_BG_BOTTOM, height=44, bd=1, relief=tk.SOLID,
+        bottom_bar = tk.Frame(self.main_container, bg=C_BG_BOTTOM, height=44, bd=1, relief=tk.SOLID,
                               highlightbackground=C_BORDER, highlightthickness=1)
         bottom_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=0, pady=0)
 
@@ -727,16 +743,13 @@ class BoneSuppressionApp(tk.Tk):
 
         if self.original_np is None:
             self.canvas.delete("all")
-            # Draw modern clinical placeholder card
+            # Modern clinical placeholder card
             cx, cy = cw // 2, ch // 2
             card_w, card_h = min(680, cw - 60), min(340, ch - 60)
             x1, y1 = cx - card_w // 2, cy - card_h // 2
             x2, y2 = cx + card_w // 2, cy + card_h // 2
 
-            # Card background
             self.canvas.create_rectangle(x1, y1, x2, y2, fill="#0d1424", outline=C_BORDER, width=1)
-
-            # Icon & titles
             self.canvas.create_text(cx, cy - 80, text="🫁", font=("Segoe UI", 36), fill=C_CYAN)
             self.canvas.create_text(cx, cy - 30, text="سامانه هوشمند حذف استخوان در رادیوگرافی قفسه سینه",
                                     font=("Segoe UI", 13, "bold"), fill=C_TEXT_LIGHT)
@@ -775,13 +788,13 @@ class BoneSuppressionApp(tk.Tk):
             self.canvas.delete("all")
             self.canvas.create_image(ox, oy, anchor=tk.NW, image=self.tk_img)
 
-            # Divider line & glowing circle handle
+            # Divider line & handle
             line_x = ox + split_x
             self.canvas.create_line(line_x, oy, line_x, oy + nh, fill=C_CYAN, width=2)
             self.canvas.create_oval(line_x - 10, oy + nh // 2 - 10, line_x + 10, oy + nh // 2 + 10,
                                    fill=C_CYAN, outline="#ffffff", width=2)
 
-            # Floating badges
+            # Badges
             self.canvas.create_rectangle(ox + 10, oy + 10, ox + 175, oy + 38, fill="#0b0f19", outline=C_BORDER)
             self.canvas.create_text(ox + 18, oy + 17, text="تصویر اصلی (Original)", fill="white", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
 
@@ -909,6 +922,31 @@ class BoneSuppressionApp(tk.Tk):
         messagebox.showinfo("پایان پردازش گروهی", f"تعداد {count} تصویر با موفقیت پردازش و ذخیره شد.")
 
 
+def handle_fatal_exception(exc_type, exc_val, exc_tb):
+    """Logs unhandled crashes to disk and presents an informative dialog."""
+    err_text = "".join(traceback.format_exception(exc_type, exc_val, exc_tb))
+    log_file = os.path.join(EXE_DIR, "bone_suppression_error.log")
+    try:
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(err_text)
+    except Exception:
+        pass
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "خطای اجرای نرم‌افزار",
+            f"متأسفانه در اجرای برنامه خطایی رخ داده است:\n\n{str(exc_val)}\n\n"
+            f"جزئیات کامل خطا در فایل زیر ثبت شد:\n{log_file}"
+        )
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    app = BoneSuppressionApp()
-    app.mainloop()
+    sys.excepthook = handle_fatal_exception
+    try:
+        app = BoneSuppressionApp()
+        app.mainloop()
+    except Exception as exc:
+        handle_fatal_exception(type(exc), exc, exc.__traceback__)

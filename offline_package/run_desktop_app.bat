@@ -3,7 +3,17 @@ chcp 65001 >nul
 title Launch BoneSuppression AI Desktop
 color 0f
 
-if exist dist\BoneSuppressionAI\BoneSuppressionAI.exe (
+if exist "BoneSuppressionAI.exe" (
+    start "" "BoneSuppressionAI.exe"
+    exit /b 0
+)
+
+if exist "BoneSuppressionAI\BoneSuppressionAI.exe" (
+    start "" "BoneSuppressionAI\BoneSuppressionAI.exe"
+    exit /b 0
+)
+
+if exist "dist\BoneSuppressionAI\BoneSuppressionAI.exe" (
     start "" "dist\BoneSuppressionAI\BoneSuppressionAI.exe"
     exit /b 0
 )

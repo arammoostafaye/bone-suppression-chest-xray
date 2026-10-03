@@ -8,9 +8,13 @@ name: build-offline-exe
 on:
   workflow_dispatch:
   push:
+    tags: ["v*"]
     paths:
       - "offline_package/**"
       - ".github/workflows/build-offline-exe.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -56,6 +60,7 @@ jobs:
           if (-not (Test-Path "$i\weights\lung_component_suppression.ts")) { throw "lung weights not bundled" }
           if (-not (Get-ChildItem $i -Recurse -Filter "tcl86t.dll" -ErrorAction SilentlyContinue)) { throw "tcl/tk runtime missing (tkinter UI would not start)" }
           python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop; print('APP IMPORT OK')"
+          python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop as b; app = b.BoneSuppressionApp(); app.update(); print('APP UI INITIALIZED OK')"
           @'
           import torch
           b = torch.jit.load("offline_package/weights/bone_suppression.ts", map_location="cpu").eval()
@@ -91,3 +96,11 @@ jobs:
           path: |
             BoneSuppressionAI-offline.tar.gz
             BoneSuppressionAI-Windows-x64-Offline.zip
+
+      - name: Publish to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            BoneSuppressionAI-Windows-x64-Offline.zip
+            BoneSuppressionAI-offline.tar.gz
