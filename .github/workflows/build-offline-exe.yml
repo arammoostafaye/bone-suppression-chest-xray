@@ -8,10 +8,8 @@ name: build-offline-exe
 on:
   workflow_dispatch:
   push:
+    branches: ["main"]
     tags: ["v*"]
-    paths:
-      - "offline_package/**"
-      - ".github/workflows/build-offline-exe.yml"
 
 permissions:
   contents: write
