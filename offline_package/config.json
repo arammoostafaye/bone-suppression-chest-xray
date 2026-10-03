@@ -1,4 +1,23 @@
 {
+  "app_name": "BoneSuppression AI - Chest X-Ray Studio",
+  "version": "2.1.0",
+  "developer": {
+    "name": "آرام مصطفائی",
+    "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
+    "organization": "شبکه بهداشت و درمان مریوان",
+    "phones": [
+      "09356808002",
+      "09188766949"
+    ],
+    "email": "arammoostafaye@gmail.com",
+    "github": "https://github.com/arammoostafaye"
+  },
+  "auth": {
+    "enabled": true,
+    "username": "boalimri.ir",
+    "initial_password_plain": "aram",
+    "password_hash": "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6cca20"
+  },
   "framework": "torchscript",
   "task": "image-to-image",
   "models": {

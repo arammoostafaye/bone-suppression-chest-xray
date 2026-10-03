@@ -3,9 +3,9 @@
 ; Supports offline installations, Persian & English interface, and DICOM association.
 
 #define MyAppName "BoneSuppression AI"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Qure.ai / Bone Suppression Project"
-#define MyAppURL "https://huggingface.co/spaces/arammoostafaye/bone-suppression-chest-xray"
+#define MyAppVersion "2.1.0"
+#define MyAppPublisher "Aram Mostafaei / Boali Hospital Marivan"
+#define MyAppURL "https://github.com/arammoostafaye/bone-suppression-chest-xray"
 #define MyAppExeName "BoneSuppressionAI.exe"
 
 [Setup]

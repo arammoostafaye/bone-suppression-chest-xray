@@ -7,6 +7,10 @@ name: build-offline-exe
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "offline_package/**"
+      - ".github/workflows/build-offline-exe.yml"
 
 jobs:
   build:
@@ -65,16 +69,25 @@ jobs:
           '@ | Set-Content probe.py
           python probe.py
 
-      - name: Pack tar.gz
+      - name: Pack zip and tar.gz
         run: |
           cd offline_package/dist
           tar -czf ../../BoneSuppressionAI-offline.tar.gz BoneSuppressionAI
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+              7z a -tzip -mx=4 ../../BoneSuppressionAI-Windows-x64-Offline.zip BoneSuppressionAI
+          } else {
+              Compress-Archive -Path BoneSuppressionAI -DestinationPath ../../BoneSuppressionAI-Windows-x64-Offline.zip -Force
+          }
           cd ../..
           certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
+          certutil -hashfile BoneSuppressionAI-Windows-x64-Offline.zip SHA256
           Get-Item BoneSuppressionAI-offline.tar.gz | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
+          Get-Item BoneSuppressionAI-Windows-x64-Offline.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: BoneSuppressionAI-offline
-          path: BoneSuppressionAI-offline.tar.gz
+          path: |
+            BoneSuppressionAI-offline.tar.gz
+            BoneSuppressionAI-Windows-x64-Offline.zip
