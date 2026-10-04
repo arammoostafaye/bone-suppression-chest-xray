@@ -47,6 +47,9 @@ jobs:
           cd offline_package
           # single line: the workflow shell is pwsh, where ^ is not a continuation
           pyinstaller --noconfirm --onedir --windowed --name "BoneSuppressionAI" --add-data "weights;weights" --add-data "config.json;." --collect-all torch --collect-all cv2 BoneSuppression_Desktop.py
+          if (Test-Path "apply_update.bat") {
+              Copy-Item "apply_update.bat" "dist\BoneSuppressionAI\" -Force
+          }
 
       - name: Verify bundle + model smoke test
         run: |
@@ -77,13 +80,20 @@ jobs:
           cd offline_package/dist
           tar -czf ../../BoneSuppressionAI-offline.tar.gz BoneSuppressionAI
           if (Get-Command 7z -ErrorAction SilentlyContinue) {
+              # Full offline package (with weights, ~960 MB)
               7z a -tzip -mx=4 ../../BoneSuppressionAI-Windows-x64-Offline.zip BoneSuppressionAI
+              # Lightweight update package (EXCLUDING weights *.ts => ~125 MB only!)
+              7z a -tzip -mx=4 ../../BoneSuppressionAI-v2.2-Update-Only.zip BoneSuppressionAI -xr!*.ts
           } else {
               Compress-Archive -Path BoneSuppressionAI -DestinationPath ../../BoneSuppressionAI-Windows-x64-Offline.zip -Force
           }
           cd ../..
           certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
           certutil -hashfile BoneSuppressionAI-Windows-x64-Offline.zip SHA256
+          if (Test-Path "BoneSuppressionAI-v2.2-Update-Only.zip") {
+              certutil -hashfile BoneSuppressionAI-v2.2-Update-Only.zip SHA256
+              Get-Item BoneSuppressionAI-v2.2-Update-Only.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
+          }
           Get-Item BoneSuppressionAI-offline.tar.gz | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           Get-Item BoneSuppressionAI-Windows-x64-Offline.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
 
@@ -94,6 +104,7 @@ jobs:
           path: |
             BoneSuppressionAI-offline.tar.gz
             BoneSuppressionAI-Windows-x64-Offline.zip
+            BoneSuppressionAI-v2.2-Update-Only.zip
 
       - name: Publish to Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -101,4 +112,5 @@ jobs:
         with:
           files: |
             BoneSuppressionAI-Windows-x64-Offline.zip
+            BoneSuppressionAI-v2.2-Update-Only.zip
             BoneSuppressionAI-offline.tar.gz
