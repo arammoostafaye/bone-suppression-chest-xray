@@ -1118,9 +1118,10 @@ class BoneSuppressionApp(tk.Tk):
             messagebox.showerror("مدل یافت نشد", "فایل مدل تشخیص شکستگی یافت نشد.\nلطفاً فایل fracture_ortho.onnx را در پوشه weights قرار دهید.")
             return
 
-        if self.fracture_net is None:
+        if getattr(self, "_loaded_frac_path", None) != frac_path or self.fracture_net is None:
             try:
                 self.fracture_net = cv2.dnn.readNetFromONNX(frac_path)
+                self._loaded_frac_path = frac_path
             except Exception as e:
                 messagebox.showerror("خطا", f"خطا در بارگذاری شبکه عصبی شکستگی:\n{e}")
                 return

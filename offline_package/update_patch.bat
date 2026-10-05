@@ -1,14 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Patch Updater (v2.4.0)
+title BoneSuppression AI - Multi-AI Patch Updater (v2.4.1)
 color 0f
 
-set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.4.0/BoneSuppressionAI-v2.4-Update-Only.zip"
-set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.4-Update-Only.zip"
-set "OUT=%~dp0BoneSuppressionAI-v2.4-Update-Only.zip"
+set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.4.1/BoneSuppressionAI-v2.4.1-Update-Only.zip"
+set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.4.1-Update-Only.zip"
+set "OUT=%~dp0BoneSuppressionAI-v2.4.1-Update-Only.zip"
 
 echo ======================================================================
-echo   BoneSuppression AI - بروزرسانی ارتوپدی و بالینی (نگارش v2.4.0)
+echo   BoneSuppression AI - بروزرسانی ارتوپدی و بالینی (نگارش v2.4.1)
 echo   قابلیت‌های جدید:
 echo     1. تفکیک اندام‌ها: شکستگی ارتوپدی (دست، مچ، ساعد، پا) و قفسه سینه
 echo     2. تنظیم اسلایدر حساسیت و کشف ترک‌های مویی
