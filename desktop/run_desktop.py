@@ -38,6 +38,16 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
+# In PyInstaller windowed apps, sys.stdout and sys.stderr are None.
+# Fix 'NoneType' object has no attribute 'write' in tqdm / huggingface_hub:
+import io
+if sys.stdout is None:
+    sys.stdout = io.StringIO()
+if sys.stderr is None:
+    sys.stderr = io.StringIO()
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
+
 # Log next to the exe when frozen (console=False hides stdout); else stderr.
 if getattr(sys, "frozen", False):
     _log_path = os.path.join(os.path.dirname(sys.executable), "bone-suppression.log")
