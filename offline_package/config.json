@@ -1,6 +1,6 @@
 {
-  "app_name": "BoneSuppression AI - Chest X-Ray Studio",
-  "version": "2.2.0",
+  "app_name": "BoneSuppression AI - Multi-AI Chest Studio",
+  "version": "2.3.0",
   "developer": {
     "name": "آرام مصطفائی",
     "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
@@ -18,28 +18,28 @@
     "initial_password_plain": "aram",
     "password_hash": "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6cca20"
   },
-  "framework": "torchscript",
-  "task": "image-to-image",
-  "models": {
-    "bone_suppression.ts": {
-      "input": "full frontal chest radiograph",
-      "output": "bone image",
-      "complement": "soft_tissue = input - bone"
+  "engines": {
+    "bone_suppression": {
+      "framework": "torchscript",
+      "task": "image-to-image",
+      "models": [
+        "bone_suppression.ts",
+        "lung_component_suppression.ts"
+      ]
     },
-    "lung_component_suppression.ts": {
-      "input": "soft-tissue residual soft = input - bone",
-      "output": "lung component",
-      "complement": "nonlung_soft_tissue = soft_tissue - lung_component"
+    "fracture_detection": {
+      "framework": "onnx",
+      "model": "fracture_yolov8.onnx",
+      "task": "object-detection",
+      "classes": [
+        "fracture"
+      ]
+    },
+    "chest_pathologies_18": {
+      "framework": "torchscript",
+      "model": "cxr_densenet18.ts",
+      "task": "multi-label-classification",
+      "pathologies_count": 18
     }
-  },
-  "preprocessing": {
-    "resize": [
-      1024,
-      1024
-    ],
-    "interpolation": "area",
-    "normalize": "min-max to [0,1] per image",
-    "channels": 1,
-    "polarity": "bone bright (invert MONOCHROME1 first)"
   }
 }

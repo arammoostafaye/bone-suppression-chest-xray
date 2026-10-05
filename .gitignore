@@ -10,3 +10,13 @@ venv/
 
 # Hugging Face weight cache if it lands inside the repo
 .cache/
+
+# Model weights
+weights/
+*.ts
+*.onnx
+*.pt
+*.bin
+*.safetensors
+*.zip
+*.tar.gz

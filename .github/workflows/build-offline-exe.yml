@@ -38,9 +38,13 @@ jobs:
           mkdir -p offline_package/weights
           curl -L --retry 3 -o offline_package/weights/bone_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/bone_suppression.ts
           curl -L --retry 3 -o offline_package/weights/lung_component_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/lung_component_suppression.ts
+          curl -L --retry 3 -o offline_package/weights/fracture_yolov8.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_yolov8.onnx
+          curl -L --retry 3 -o offline_package/weights/cxr_densenet18.ts https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/cxr_densenet18.ts
           Get-ChildItem offline_package/weights | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           if ((Get-Item offline_package/weights/bone_suppression.ts).Length -lt 400000000) { throw "bone weights incomplete" }
           if ((Get-Item offline_package/weights/lung_component_suppression.ts).Length -lt 400000000) { throw "lung weights incomplete" }
+          if ((Get-Item offline_package/weights/fracture_yolov8.onnx).Length -lt 10000000) { throw "fracture weights incomplete" }
+          if ((Get-Item offline_package/weights/cxr_densenet18.ts).Length -lt 25000000) { throw "pathology weights incomplete" }
 
       - name: Build with PyInstaller (package flags, verbatim)
         run: |
@@ -59,11 +63,14 @@ jobs:
           if (-not (Test-Path "$d\BoneSuppressionAI.exe")) { throw "exe missing" }
           if (-not (Test-Path "$i\weights\bone_suppression.ts")) { throw "bone weights not bundled" }
           if (-not (Test-Path "$i\weights\lung_component_suppression.ts")) { throw "lung weights not bundled" }
+          if (-not (Test-Path "$i\weights\fracture_yolov8.onnx")) { throw "fracture weights not bundled" }
+          if (-not (Test-Path "$i\weights\cxr_densenet18.ts")) { throw "pathology weights not bundled" }
           if (-not (Get-ChildItem $i -Recurse -Filter "tcl86t.dll" -ErrorAction SilentlyContinue)) { throw "tcl/tk runtime missing (tkinter UI would not start)" }
           python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop; print('APP IMPORT OK')"
           python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop as b; app = b.BoneSuppressionApp(); app.update(); print('APP UI INITIALIZED OK')"
           @'
-          import torch
+          import torch, cv2, numpy as np
+          # 1. Test Bone Suppression
           b = torch.jit.load("offline_package/weights/bone_suppression.ts", map_location="cpu").eval()
           l = torch.jit.load("offline_package/weights/lung_component_suppression.ts", map_location="cpu").eval()
           x = torch.rand(1, 1, 1024, 1024)
@@ -71,7 +78,21 @@ jobs:
               bo = b(x); bo = bo[0] if isinstance(bo, (list, tuple)) else bo
               soft = x - bo
               lu = l(soft); lu = lu[0] if isinstance(lu, (list, tuple)) else lu
-          print("MODEL SMOKE OK", tuple(bo.shape), tuple(lu.shape))
+          print("MODEL 1 (BONE SUPPRESSION) OK", tuple(bo.shape), tuple(lu.shape))
+
+          # 2. Test Fracture YOLOv8
+          fnet = cv2.dnn.readNetFromONNX("offline_package/weights/fracture_yolov8.onnx")
+          blob = cv2.dnn.blobFromImage(np.zeros((640,640,3), dtype=np.uint8), 1/255.0, (640,640))
+          fnet.setInput(blob)
+          fout = fnet.forward()
+          print("MODEL 2 (FRACTURE YOLOv8) OK", fout.shape)
+
+          # 3. Test 18 Pathologies DenseNet-121
+          pnet = torch.jit.load("offline_package/weights/cxr_densenet18.ts", map_location="cpu").eval()
+          px = torch.rand(1, 1, 224, 224)
+          with torch.no_grad():
+              pout = pnet(px)
+          print("MODEL 3 (18 PATHOLOGIES DENSENET) OK", pout.shape)
           '@ | Set-Content probe.py
           python probe.py
 
@@ -80,19 +101,19 @@ jobs:
           cd offline_package/dist
           tar -czf ../../BoneSuppressionAI-offline.tar.gz BoneSuppressionAI
           if (Get-Command 7z -ErrorAction SilentlyContinue) {
-              # Full offline package (with weights, ~960 MB)
+              # Full offline package (with all weights, ~1000 MB)
               7z a -tzip -mx=4 ../../BoneSuppressionAI-Windows-x64-Offline.zip BoneSuppressionAI
-              # Lightweight update package (EXCLUDING weights *.ts => ~125 MB only!)
-              7z a -tzip -mx=4 ../../BoneSuppressionAI-v2.2-Update-Only.zip BoneSuppressionAI -xr!*.ts
+              # Lightweight update package (EXCLUDING ONLY heavy 835 MB weights, KEEPING new fracture and pathology models => ~280 MB!)
+              7z a -tzip -mx=4 ../../BoneSuppressionAI-v2.3-Update-Only.zip BoneSuppressionAI -xr!bone_suppression.ts -xr!lung_component_suppression.ts
           } else {
               Compress-Archive -Path BoneSuppressionAI -DestinationPath ../../BoneSuppressionAI-Windows-x64-Offline.zip -Force
           }
           cd ../..
           certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
           certutil -hashfile BoneSuppressionAI-Windows-x64-Offline.zip SHA256
-          if (Test-Path "BoneSuppressionAI-v2.2-Update-Only.zip") {
-              certutil -hashfile BoneSuppressionAI-v2.2-Update-Only.zip SHA256
-              Get-Item BoneSuppressionAI-v2.2-Update-Only.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
+          if (Test-Path "BoneSuppressionAI-v2.3-Update-Only.zip") {
+              certutil -hashfile BoneSuppressionAI-v2.3-Update-Only.zip SHA256
+              Get-Item BoneSuppressionAI-v2.3-Update-Only.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           }
           Get-Item BoneSuppressionAI-offline.tar.gz | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           Get-Item BoneSuppressionAI-Windows-x64-Offline.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
@@ -104,7 +125,7 @@ jobs:
           path: |
             BoneSuppressionAI-offline.tar.gz
             BoneSuppressionAI-Windows-x64-Offline.zip
-            BoneSuppressionAI-v2.2-Update-Only.zip
+            BoneSuppressionAI-v2.3-Update-Only.zip
 
       - name: Publish to Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -112,5 +133,5 @@ jobs:
         with:
           files: |
             BoneSuppressionAI-Windows-x64-Offline.zip
-            BoneSuppressionAI-v2.2-Update-Only.zip
+            BoneSuppressionAI-v2.3-Update-Only.zip
             BoneSuppressionAI-offline.tar.gz

@@ -1,19 +1,24 @@
 """
-BoneSuppression AI - Clinical Chest Radiograph Workstation
+BoneSuppression AI - Clinical Multi-AI Chest Radiograph Workstation
 Native Offline Windows Desktop Application
-Based on Qure.ai CT2XR Research (arXiv:2609.24937)
+Based on Qure.ai CT2XR Research (arXiv:2609.24937), FracAtlas YOLOv8, and TorchXRayVision DenseNet-121
 
 Developer / توسعه و آماده‌سازی نسخه دسکتاپ ویندوز:
 آرام مصطفائی (Aram Mostafaei)
 پرسنل واحد امور تصویربرداری بیمارستان بوعلی - شبکه بهداشت و درمان مریوان
 
 Supports:
-- 100% Offline execution on air-gapped clinical systems
+- 100% Offline execution on clinical workstations (CPU / CUDA)
+- Three Integrated AI Engines:
+    1. Bone Suppression & Soft Tissue Separation (Qure.ai TorchScript)
+    2. Automated Bone Fracture Detection & Localization (YOLOv8 ONNX)
+    3. Comprehensive 18 Chest & Heart Pathology Screening (TorchXRayVision DenseNet-121)
+- Specialized Dockable Radiology Sidebar with Clinical Image Adjustments
 - User authentication & access control (boalimri.ir / aram)
 - Hierarchical animated clinical splash screen
 - Modern Shadcn/GPUI-inspired dark medical interface
 - Multi-tab developer profile & attribution center
-- Automatic detection and reuse of existing model weights
+- Automatic detection and reuse of existing model weights across directories
 """
 
 import os
@@ -46,7 +51,7 @@ except ImportError:
     pydicom = None
 
 # -----------------------------------------------------------------------------
-# Path Resolution & Model Weight Re-use (Never re-download if already exists)
+# Path Resolution & Deep Model Weight Search
 # -----------------------------------------------------------------------------
 if getattr(sys, 'frozen', False):
     EXE_DIR = os.path.dirname(os.path.abspath(sys.executable))
@@ -56,37 +61,57 @@ else:
     BUNDLE_DIR = EXE_DIR
 
 PARENT_DIR = os.path.dirname(EXE_DIR)
+GRANDPARENT_DIR = os.path.dirname(PARENT_DIR)
 
-SEARCH_DIRS = [
-    EXE_DIR,
-    BUNDLE_DIR,
-    os.path.join(EXE_DIR, "weights"),
-    os.path.join(BUNDLE_DIR, "weights"),
-    os.path.join(EXE_DIR, "_internal"),
-    os.path.join(EXE_DIR, "_internal", "weights"),
-    os.path.join(BUNDLE_DIR, "_internal"),
-    os.path.join(BUNDLE_DIR, "_internal", "weights"),
-    # Also look in sibling folders from older installations (e.g. BoneSuppressionAI)
-    PARENT_DIR,
-    os.path.join(PARENT_DIR, "weights"),
-    os.path.join(PARENT_DIR, "BoneSuppressionAI", "weights"),
-    os.path.join(PARENT_DIR, "BoneSuppressionAI", "_internal", "weights"),
-    os.getcwd()
-]
+def find_weight_file(filename):
+    """Deep search for model weights across current, parent, grandparent and sibling folders."""
+    candidates = [
+        # In current execution directory
+        os.path.join(EXE_DIR, "weights", filename),
+        os.path.join(BUNDLE_DIR, "weights", filename),
+        os.path.join(EXE_DIR, "_internal", "weights", filename),
+        os.path.join(BUNDLE_DIR, "_internal", "weights", filename),
+        os.path.join(EXE_DIR, filename),
+        os.path.join(BUNDLE_DIR, filename),
+        # Parent directories (for nested update installations)
+        os.path.join(PARENT_DIR, "weights", filename),
+        os.path.join(PARENT_DIR, "_internal", "weights", filename),
+        os.path.join(PARENT_DIR, filename),
+        os.path.join(PARENT_DIR, "BoneSuppressionAI", "weights", filename),
+        os.path.join(PARENT_DIR, "BoneSuppressionAI", "_internal", "weights", filename),
+        # Grandparent directories
+        os.path.join(GRANDPARENT_DIR, "weights", filename),
+        os.path.join(GRANDPARENT_DIR, "_internal", "weights", filename),
+        os.path.join(GRANDPARENT_DIR, "BoneSuppressionAI", "weights", filename),
+        os.path.join(GRANDPARENT_DIR, "BoneSuppressionAI", "_internal", "weights", filename),
+        os.path.join(os.getcwd(), "weights", filename),
+        os.path.join(os.getcwd(), "_internal", "weights", filename),
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.path.getsize(c) > 500:
+            return c
+    # Fallback default location
+    return os.path.join(BUNDLE_DIR, "_internal", "weights", filename)
 
 def find_file(rel_path):
-    """Finds a file across multiple candidate directories, prioritizing existing weights."""
-    for base in SEARCH_DIRS:
-        if not base:
-            continue
-        candidate = os.path.join(base, rel_path)
-        if os.path.isfile(candidate):
-            return candidate
+    """Finds general resources like config.json."""
+    candidates = [
+        os.path.join(EXE_DIR, rel_path),
+        os.path.join(BUNDLE_DIR, rel_path),
+        os.path.join(PARENT_DIR, rel_path),
+        os.path.join(PARENT_DIR, "BoneSuppressionAI", rel_path),
+        os.path.join(os.getcwd(), rel_path)
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
     return os.path.join(BUNDLE_DIR, rel_path)
 
 CONFIG_PATH = find_file("config.json")
-BONE_WEIGHTS_PATH = find_file(os.path.join("weights", "bone_suppression.ts"))
-LUNG_WEIGHTS_PATH = find_file(os.path.join("weights", "lung_component_suppression.ts"))
+BONE_WEIGHTS_PATH = find_weight_file("bone_suppression.ts")
+LUNG_WEIGHTS_PATH = find_weight_file("lung_component_suppression.ts")
+FRACTURE_WEIGHTS_PATH = find_weight_file("fracture_yolov8.onnx")
+PATHOLOGY_WEIGHTS_PATH = find_weight_file("cxr_densenet18.ts")
 SIZE = 1024
 
 # Default credentials
@@ -95,7 +120,7 @@ DEFAULT_PASS = "aram"
 DEFAULT_PASS_HASH = "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6cca20"
 
 # Application Metadata & Developer Profile
-APP_TITLE = "BoneSuppression AI - Chest X-Ray Studio"
+APP_TITLE = "BoneSuppression AI - Multi-AI Chest Studio"
 HOSPITAL_TITLE = "بیمارستان بوعلی مریوان"
 NETWORK_TITLE = "شبکه بهداشت و درمان مریوان"
 DEVELOPER_NAME = "آرام مصطفائی"
@@ -108,26 +133,26 @@ UPSTREAM_SOURCE = "https://huggingface.co/qureaiorg/bone-suppression"
 # -----------------------------------------------------------------------------
 # Modern Dark UI Theme Tokens (Inspired by GPUI / Shadcn / Tailwind Slate)
 # -----------------------------------------------------------------------------
-C_CANVAS      = "#090d16"   # Deepest background
-C_CARD        = "#111827"   # Elevated card background
-C_CARD_HOVER  = "#172236"   # Card hover highlight
-C_HEADER      = "#0f172a"   # Navigation header
-C_TOOLBAR     = "#182234"   # Primary action toolbar
-C_BORDER      = "#27354a"   # Subtle clean borders
-C_BORDER_SUBTLE="#1e293b"   # Very subtle dividers
-C_TEXT_LIGHT  = "#f8fafc"   # Primary text
-C_TEXT_MUTED  = "#94a3b8"   # Secondary text
-C_TEXT_DIM    = "#64748b"   # Tertiary hints
-C_CYAN        = "#38bdf8"   # Primary brand accent
-C_BLUE        = "#2563eb"   # Primary action button
-C_BLUE_HOVER  = "#3b82f6"
-C_GREEN       = "#059669"   # Inference / success button
-C_GREEN_HOVER = "#10b981"
-C_SLATE       = "#334155"   # Neutral button
-C_SLATE_HOVER = "#475569"
-C_AMBER       = "#f59e0b"   # Warning / accent
-C_RED         = "#dc2626"   # Danger / exit
-C_RED_HOVER   = "#ef4444"
+C_CANVAS        = "#090d16"   # Deepest background
+C_CARD          = "#111827"   # Elevated card background
+C_CARD_HOVER    = "#172236"   # Card hover highlight
+C_HEADER        = "#0f172a"   # Navigation header
+C_TOOLBAR       = "#182234"   # Primary action toolbar
+C_BORDER        = "#27354a"   # Subtle clean borders
+C_BORDER_SUBTLE = "#1e293b"   # Very subtle dividers
+C_TEXT_LIGHT    = "#f8fafc"   # Primary text
+C_TEXT_MUTED    = "#94a3b8"   # Secondary text
+C_TEXT_DIM      = "#64748b"   # Tertiary hints
+C_CYAN          = "#38bdf8"   # Primary brand accent
+C_BLUE          = "#2563eb"   # Primary action button
+C_BLUE_HOVER    = "#3b82f6"
+C_GREEN         = "#059669"   # Inference / success button
+C_GREEN_HOVER   = "#10b981"
+C_SLATE         = "#334155"   # Neutral button
+C_SLATE_HOVER   = "#475569"
+C_AMBER         = "#f59e0b"   # Warning / accent
+C_RED           = "#dc2626"   # Danger / exit
+C_RED_HOVER     = "#ef4444"
 
 
 def create_modern_button(parent, text, command, bg, hover_bg, fg="white",
@@ -135,295 +160,288 @@ def create_modern_button(parent, text, command, bg, hover_bg, fg="white",
     """Creates a modern flat button with responsive hover highlight."""
     btn = tk.Button(parent, text=text, command=command, bg=bg, fg=fg,
                     activebackground=hover_bg, activeforeground=fg,
-                    font=font, padx=padx, pady=pady, relief=relief, bd=bd,
+                    font=font, relief=relief, bd=bd, padx=padx, pady=pady,
                     cursor="hand2", highlightthickness=0)
-    btn.bind("<Enter>", lambda e: btn.configure(bg=hover_bg))
-    btn.bind("<Leave>", lambda e: btn.configure(bg=bg))
+
+    def on_enter(e):
+        btn.config(bg=hover_bg)
+
+    def on_leave(e):
+        btn.config(bg=bg)
+
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
     return btn
 
 
 # -----------------------------------------------------------------------------
-# Modern 3-Tab About & Attribution Modal (Replacing the plain text box)
+# 1. Modern 3-Tab About / Developer Center Modal
 # -----------------------------------------------------------------------------
 class ModernAboutDialog(tk.Toplevel):
-    """Redesigned, multi-tab clinical and developer presentation center."""
+    """GPUI / Shadcn-inspired 3-tab modal dialog with structured cards, copy buttons, and legal disclaimers."""
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("درباره نرم‌افزار Bone Suppression Chest X-ray")
-        self.geometry("860x720")
-        self.minsize(780, 620)
+        self.title("درباره نرم‌افزار | BoneSuppression AI")
+        self.geometry("820x640")
+        self.minsize(740, 560)
         self.configure(bg=C_CANVAS)
-
-        # Center on parent or screen
-        self.update_idletasks()
-        w, h = 860, 720
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
-
         self.transient(parent)
-        self.bind("<Escape>", lambda e: self.destroy())
+        self.grab_set()
+
+        # Center on parent
+        self.update_idletasks()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        x = max(0, px + (pw - 820) // 2)
+        y = max(0, py + (ph - 640) // 2)
+        self.geometry(f"820x640+{x}+{y}")
 
         self.current_tab = "overview"
         self.init_ui()
-        self.lift()
-        self.focus_force()
 
     def init_ui(self):
-        # Top Header Bar
-        top_bar = tk.Frame(self, bg=C_HEADER, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        top_bar.pack(fill=tk.X, padx=16, pady=(16, 10))
+        # Top Header Banner
+        header = tk.Frame(self, bg=C_HEADER, height=72, bd=0)
+        header.pack(fill=tk.X, side=tk.TOP)
 
-        h_content = tk.Frame(top_bar, bg=C_HEADER)
-        h_content.pack(fill=tk.X, padx=16, pady=12)
+        title_frame = tk.Frame(header, bg=C_HEADER)
+        title_frame.pack(side=tk.LEFT, padx=22, pady=12)
 
-        tk.Label(h_content, text="🫁 درباره نرم‌افزار Bone Suppression Chest X-ray",
-                 font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_HEADER).pack(side=tk.RIGHT)
-        tk.Label(h_content, text=f"{HOSPITAL_TITLE} - {NETWORK_TITLE} | {DEVELOPER_ROLE}",
-                 font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER).pack(side=tk.LEFT)
+        tk.Label(title_frame, text="🫁 BoneSuppression AI - Multi-AI Chest Studio",
+                 font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_HEADER).pack(anchor=tk.W)
+        tk.Label(title_frame, text=f"نگارش v2.3.0 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
+                 font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER).pack(anchor=tk.W, pady=(2, 0))
 
-        # Segmented Tabs Bar (GPUI / Shadcn Pill Style)
-        tab_bar = tk.Frame(self, bg=C_CANVAS)
-        tab_bar.pack(fill=tk.X, padx=16, pady=(0, 10))
+        btn_close = create_modern_button(header, "✕ بستن", self.destroy,
+                                         bg=C_SLATE, hover_bg=C_RED, font=("Segoe UI", 9), padx=12, pady=4)
+        btn_close.pack(side=tk.RIGHT, padx=18, pady=18)
 
-        self.btn_tab_overview = create_modern_button(
-            tab_bar, "📖 معرفی و یادداشت توسعه‌دهنده",
-            lambda: self.switch_tab("overview"),
-            bg=C_BLUE, hover_bg=C_BLUE_HOVER, font=("Segoe UI", 9, "bold"), padx=16, pady=6
-        )
-        self.btn_tab_overview.pack(side=tk.RIGHT, padx=4)
+        tk.Frame(self, bg=C_BORDER, height=1).pack(fill=tk.X, side=tk.TOP)
 
-        self.btn_tab_developer = create_modern_button(
-            tab_bar, "👨‍💻 مشخصات سازنده و ارتباط",
-            lambda: self.switch_tab("developer"),
-            bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9), padx=16, pady=6
-        )
-        self.btn_tab_developer.pack(side=tk.RIGHT, padx=4)
+        # Tab Bar (GPUI-style segmented control)
+        tab_bar = tk.Frame(self, bg=C_TOOLBAR, height=44)
+        tab_bar.pack(fill=tk.X, side=tk.TOP)
 
-        self.btn_tab_legal = create_modern_button(
-            tab_bar, "⚖️ حقوق مالکیت و سلب مسئولیت بالینی",
-            lambda: self.switch_tab("legal"),
-            bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9), padx=16, pady=6
-        )
-        self.btn_tab_legal.pack(side=tk.RIGHT, padx=4)
+        self.tabs_container = tk.Frame(tab_bar, bg=C_TOOLBAR)
+        self.tabs_container.pack(side=tk.LEFT, padx=16, pady=6)
 
-        # Tab Content Container
+        self.tab_buttons = {}
+        tabs = [
+            ("overview", "📖 معرفی و یادداشت توسعه‌دهنده"),
+            ("developer", "👨‍💻 مشخصات سازنده و راه‌های ارتباط"),
+            ("legal", "⚖️ حقوق مالکیت، هوش مصنوعی و سلب مسئولیت"),
+        ]
+
+        for tab_id, tab_title in tabs:
+            btn = tk.Button(self.tabs_container, text=tab_title,
+                            font=("Segoe UI", 9, "bold" if tab_id == self.current_tab else "normal"),
+                            bg=C_BLUE if tab_id == self.current_tab else C_TOOLBAR,
+                            fg=C_TEXT_LIGHT if tab_id == self.current_tab else C_TEXT_MUTED,
+                            activebackground=C_BLUE_HOVER, activeforeground=C_TEXT_LIGHT,
+                            relief=tk.FLAT, bd=0, padx=14, pady=6, cursor="hand2",
+                            command=lambda t=tab_id: self.switch_tab(t))
+            btn.pack(side=tk.LEFT, padx=4)
+            self.tab_buttons[tab_id] = btn
+
+        tk.Frame(self, bg=C_BORDER_SUBTLE, height=1).pack(fill=tk.X, side=tk.TOP)
+
+        # Main Content Scroll Area
         self.content_frame = tk.Frame(self, bg=C_CANVAS)
-        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=0)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=22, pady=16)
 
-        # Bottom Action Bar
-        bottom_bar = tk.Frame(self, bg=C_CANVAS)
-        bottom_bar.pack(fill=tk.X, padx=16, pady=12)
-
-        btn_close = create_modern_button(bottom_bar, "بستن پنجره (Close / Esc)", self.destroy,
-                                         bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9, "bold"), padx=22, pady=6)
-        btn_close.pack(side=tk.RIGHT)
-
-        # Render initial tab
-        self.render_overview_tab()
+        self.render_tab_content()
 
     def switch_tab(self, tab_id):
         self.current_tab = tab_id
+        for tid, btn in self.tab_buttons.items():
+            if tid == tab_id:
+                btn.config(bg=C_BLUE, fg=C_TEXT_LIGHT, font=("Segoe UI", 9, "bold"))
+            else:
+                btn.config(bg=C_TOOLBAR, fg=C_TEXT_MUTED, font=("Segoe UI", 9, "normal"))
+
         for w in self.content_frame.winfo_children():
             w.destroy()
 
-        # Update tab button styles
-        self.btn_tab_overview.config(bg=C_BLUE if tab_id == "overview" else C_SLATE)
-        self.btn_tab_developer.config(bg=C_BLUE if tab_id == "developer" else C_SLATE)
-        self.btn_tab_legal.config(bg=C_BLUE if tab_id == "legal" else C_SLATE)
+        self.render_tab_content()
 
-        if tab_id == "overview":
+    def render_tab_content(self):
+        if self.current_tab == "overview":
             self.render_overview_tab()
-        elif tab_id == "developer":
+        elif self.current_tab == "developer":
             self.render_developer_tab()
-        elif tab_id == "legal":
+        elif self.current_tab == "legal":
             self.render_legal_tab()
 
     def render_overview_tab(self):
-        """Tab 1: Beautiful scrollable cards presenting the developer statement."""
-        canvas = tk.Canvas(self.content_frame, bg=C_CANVAS, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.content_frame, orient=tk.VERTICAL, command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg=C_CANVAS)
+        # Card 1: Core purpose & dedication
+        card1 = tk.Frame(self.content_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                         highlightbackground=C_BORDER, highlightthickness=1)
+        card1.pack(fill=tk.X, pady=(0, 12), padx=4)
 
-        scroll_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        c1_head = tk.Frame(card1, bg=C_CARD)
+        c1_head.pack(fill=tk.X, padx=16, pady=(12, 6))
+        tk.Label(c1_head, text="🩻 اهداف و دستاوردهای ایستگاه کاری هوش مصنوعی رادیولوژی",
+                 font=("Segoe UI", 11, "bold"), fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W)
+
+        desc = (
+            "این سامانه بومی و آفلاین به‌منظور ارتقای کیفیت تفسیر تصاویر رادیوگرافی قفسه سینه در مراکز درمانی "
+            "طراحی شده است. با بهره‌گیری از ۳ موتور هوش مصنوعی تخصصی، این ابزار امکان حذف استخوان‌های دنده و کلاویکل "
+            "جهت آشکارسازی ندول‌ها، تشخیص و کادربندی خودکار شکستگی‌ها، و غربالگری ۱۸ بیماری ریوی و قلبی را فراهم می‌سازد."
         )
-        cw = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(cw, width=e.width - 20))
-        canvas.configure(yscrollcommand=scrollbar.set)
+        tk.Label(card1, text=desc, font=("Segoe UI", 9), fg=C_TEXT_LIGHT, bg=C_CARD,
+                 justify=tk.RIGHT, wraplength=730).pack(fill=tk.X, padx=16, pady=(0, 12))
 
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Card 2: 3 Integrated AI Engines
+        card2 = tk.Frame(self.content_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                         highlightbackground=C_BORDER, highlightthickness=1)
+        card2.pack(fill=tk.X, pady=(0, 12), padx=4)
 
-        # Card 1: Project Mission
-        card1 = tk.Frame(scroll_frame, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        card1.pack(fill=tk.X, pady=(0, 10))
+        c2_head = tk.Frame(card2, bg=C_CARD)
+        c2_head.pack(fill=tk.X, padx=16, pady=(12, 6))
+        tk.Label(c2_head, text="🧠 ۳ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.3",
+                 font=("Segoe UI", 10, "bold"), fg=C_AMBER, bg=C_CARD).pack(anchor=tk.W)
 
-        tk.Label(card1, text="🫁 معرفی نرم‌افزار Bone Suppression Chest X-ray", font=("Segoe UI", 11, "bold"),
-                 fg=C_CYAN, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, padx=18, pady=(14, 6))
+        engines = [
+            ("۱. موتور حذف استخوان (Bone Suppression AI)",
+             "مدل تحقیقاتی Qure.ai جهت استخراج بافت نرم و حذف سایه دنده‌ها و ترقوه بدون نیاز به اشعه اضافی."),
+            ("۲. موتور تشخیص شکستگی استخوان (Fracture Detection AI)",
+             "مدل بهینه‌شده YOLOv8 آموزش‌دیده روی دیتاست FracAtlas جهت کشف و کادربندی شکستگی‌ها با درصد اطمینان."),
+            ("۳. موتور جامع ۱۸ بیماری قفسه سینه (TorchXRayVision DenseNet-121)",
+             "مدل استاندارد جهانی جهت غربالگری کاردیومگالی، پلورال افیوژن، پنوموتوراکس، پنومونی، ندول و توده‌ها.")
+        ]
+        for title, detail in engines:
+            e_frame = tk.Frame(card2, bg=C_CARD)
+            e_frame.pack(fill=tk.X, padx=16, pady=4)
+            tk.Label(e_frame, text=title, font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack(anchor=tk.W)
+            tk.Label(e_frame, text=detail, font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD,
+                     justify=tk.RIGHT, wraplength=720).pack(anchor=tk.W, pady=(1, 4))
 
-        tk.Label(card1, text=(
-            "این نرم‌افزار با هدف پردازش تصاویر رادیوگرافی قفسه سینه (Chest X-ray) و جداسازی اثر سایه‌های "
-            "استخوانی از تصویر، با بهره‌گیری از روش‌های پردازش تصویر و هوش مصنوعی توسعه داده شده است."
-        ), font=("Segoe UI", 10), fg=C_TEXT_LIGHT, bg=C_CARD, justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 14))
-
-        # Card 2: Developer Personal Note
-        card2 = tk.Frame(scroll_frame, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        card2.pack(fill=tk.X, pady=(0, 10))
-
-        tk.Label(card2, text="✍️ یادداشت توسعه‌دهنده", font=("Segoe UI", 11, "bold"),
-                 fg="#10b981", bg=C_CARD, anchor=tk.E).pack(fill=tk.X, padx=18, pady=(14, 6))
-
-        p1 = (
-            "اینجانب آرام مصطفائی، به‌عنوان عضوی کوچک از مجموعه نظام سلامت شهرستان مریوان و از پرسنل واحد "
-            "امور تصویربرداری بیمارستان بوعلی، همواره علاقه‌مند به استفاده از فناوری‌های نوین در جهت بهبود "
-            "فرایندهای کاری و ارتقای امکانات حوزه تصویربرداری پزشکی بوده‌ام."
+        # Developer Note Box
+        note_box = tk.Frame(self.content_frame, bg="#0d1f2d", bd=1, relief=tk.SOLID,
+                            highlightbackground="#164e63", highlightthickness=1)
+        note_box.pack(fill=tk.X, padx=4, pady=4)
+        tk.Label(note_box, text="💬 یادداشت توسعه‌دهنده:", font=("Segoe UI", 9, "bold"), fg=C_CYAN, bg="#0d1f2d").pack(anchor=tk.W, padx=14, pady=(8, 2))
+        note_text = (
+            "«به عنوان یکی از پرسنل واحد تصویربرداری بیمارستان بوعلی مریوان، این پروژه را با هدف خدمت‌رسانی صادقانه به نظام سلامت "
+            "و دسترسی همکاران عزیز به مدرن‌ترین فناوری‌های هوش مصنوعی تصویربرداری به ثمر رسانده‌ام.»"
         )
-        tk.Label(card2, text=p1, font=("Segoe UI", 10), fg=C_TEXT_LIGHT, bg=C_CARD,
-                 justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 8))
-
-        p2 = (
-            "این پروژه حاصل علاقه شخصی به برنامه‌نویسی، فناوری و هوش مصنوعی و تلاشی در راستای پیوند دانش فناوری "
-            "اطلاعات با تجربه عملی در محیط درمانی است. امید دارم این گام کوچک بتواند زمینه‌ای برای یادگیری، "
-            "توسعه ایده‌های نوآورانه و کمک به پیشرفت ابزارهای مرتبط با تصویربرداری پزشکی فراهم کند."
-        )
-        tk.Label(card2, text=p2, font=("Segoe UI", 10), fg=C_TEXT_LIGHT, bg=C_CARD,
-                 justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 8))
-
-        p3 = (
-            "باور دارم که پیشرفت نظام سلامت، علاوه بر تلاش‌های ارزشمند کادر درمان، می‌تواند از ایده‌های خلاقانه، "
-            "یادگیری مستمر و به‌کارگیری مسئولانه فناوری نیز بهره‌مند شود."
-        )
-        tk.Label(card2, text=p3, font=("Segoe UI", 10), fg=C_TEXT_LIGHT, bg=C_CARD,
-                 justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 8))
-
-        p4 = "این نرم‌افزار را با افتخار و به‌عنوان تلاشی شخصی، در راستای خدمت به جامعه درمانی و همشهریان عزیزم در شهرستان مریوان ارائه می‌کنم."
-        tk.Label(card2, text=p4, font=("Segoe UI", 10, "bold"), fg=C_CYAN, bg=C_CARD,
-                 justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 14))
-
-        # Card 3: Gratitude
-        card3 = tk.Frame(scroll_frame, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        card3.pack(fill=tk.X)
-        tk.Label(card3, text="با سپاس از تمامی افرادی که در مسیر یادگیری، توسعه و پیشرفت علم و فناوری تلاش می‌کنند.",
-                 font=("Segoe UI", 9, "italic"), fg=C_TEXT_MUTED, bg=C_CARD, justify=tk.CENTER).pack(padx=18, pady=12)
+        tk.Label(note_box, text=note_text, font=("Segoe UI", 9, "italic"), fg="#e0f2fe", bg="#0d1f2d",
+                 justify=tk.RIGHT, wraplength=720).pack(fill=tk.X, padx=14, pady=(0, 10))
 
     def render_developer_tab(self):
-        """Tab 2: Sleek developer profile cards with direct contact details."""
-        container = tk.Frame(self.content_frame, bg=C_CANVAS)
-        container.pack(fill=tk.BOTH, expand=True)
+        # Profile Header Card
+        profile_card = tk.Frame(self.content_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                                highlightbackground=C_BORDER, highlightthickness=1)
+        profile_card.pack(fill=tk.X, pady=(0, 14), padx=4)
 
-        # Profile Hero Card
-        hero = tk.Frame(container, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        hero.pack(fill=tk.X, pady=(0, 14))
+        p_inner = tk.Frame(profile_card, bg=C_CARD)
+        p_inner.pack(fill=tk.X, padx=18, pady=14)
 
-        top_hero = tk.Frame(hero, bg=C_CARD)
-        top_hero.pack(fill=tk.X, padx=20, pady=18)
+        avatar = tk.Label(p_inner, text="👨‍💻", font=("Segoe UI", 32), bg=C_CARD)
+        avatar.pack(side=tk.LEFT, padx=(0, 14))
 
-        tk.Label(top_hero, text="👨‍⚕️", font=("Segoe UI", 38), bg=C_CARD).pack(side=tk.RIGHT, padx=(16, 0))
+        p_info = tk.Frame(p_inner, bg=C_CARD)
+        p_info.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        info_box = tk.Frame(top_hero, bg=C_CARD)
-        info_box.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        tk.Label(p_info, text=DEVELOPER_NAME, font=("Segoe UI", 13, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack(anchor=tk.W)
+        tk.Label(p_info, text=f"{DEVELOPER_ROLE} | {HOSPITAL_TITLE}",
+                 font=("Segoe UI", 9), fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(p_info, text=f"وابستگی سازمانی: {NETWORK_TITLE}",
+                 font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD).pack(anchor=tk.W, pady=(2, 0))
 
-        tk.Label(info_box, text=DEVELOPER_NAME, font=("Segoe UI", 16, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD, anchor=tk.E).pack(fill=tk.X)
-        tk.Label(info_box, text=DEVELOPER_ROLE, font=("Segoe UI", 11), fg=C_CYAN, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, pady=(2, 2))
-        tk.Label(info_box, text=NETWORK_TITLE, font=("Segoe UI", 10), fg=C_TEXT_MUTED, bg=C_CARD, anchor=tk.E).pack(fill=tk.X)
-
-        # Contact Details Grid
-        grid_frame = tk.Frame(container, bg=C_CANVAS)
-        grid_frame.pack(fill=tk.BOTH, expand=True)
+        # Contacts Grid (2x2 Cards with Copy Buttons)
+        grid_frame = tk.Frame(self.content_frame, bg=C_CANVAS)
+        grid_frame.pack(fill=tk.BOTH, expand=True, padx=4)
 
         contacts = [
-            ("📱 شماره تماس همراه (همراه اول):", DEVELOPER_PHONES[1], "#10b981"),
-            ("📞 شماره تماس همراه (ایرانسل):", DEVELOPER_PHONES[0], "#38bdf8"),
-            ("✉️ آدرس رایانامه (Email):", DEVELOPER_EMAIL, "#818cf8"),
-            ("🌐 صفحه گیت‌هاب (GitHub):", DEVELOPER_GITHUB, "#f59e0b"),
+            ("📞 شماره تماس اولیه (همراه اول):", DEVELOPER_PHONES[0]),
+            ("📱 شماره تماس پشتیبان (ایرانسل):", DEVELOPER_PHONES[1]),
+            ("📧 رایانامه (ایمیل کاری):", DEVELOPER_EMAIL),
+            ("🌐 گیت‌هاب رسمی توسعه‌دهنده:", DEVELOPER_GITHUB),
         ]
 
-        for i, (title, val, color) in enumerate(contacts):
+        for i, (label_txt, val_txt) in enumerate(contacts):
             row = i // 2
             col = i % 2
-            c_box = tk.Frame(grid_frame, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-            c_box.grid(row=row, column=col, sticky="nsew", padx=6, pady=6)
-            grid_frame.grid_columnconfigure(col, weight=1)
-            grid_frame.grid_rowconfigure(row, weight=1)
+            card = tk.Frame(grid_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                            highlightbackground=C_BORDER, highlightthickness=1)
+            card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+            grid_frame.columnconfigure(col, weight=1)
 
-            tk.Label(c_box, text=title, font=("Segoe UI", 9, "bold"), fg=C_TEXT_MUTED, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, padx=14, pady=(14, 4))
-            tk.Label(c_box, text=val, font=("Segoe UI", 11, "bold"), fg=color, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, padx=14, pady=(0, 10))
+            tk.Label(card, text=label_txt, font=("Segoe UI", 8, "bold"), fg=C_TEXT_MUTED, bg=C_CARD).pack(anchor=tk.W, padx=12, pady=(10, 2))
 
-            btn_copy = create_modern_button(
-                c_box, "کپی در حافظه",
-                lambda v=val: self.copy_to_clipboard(v),
-                bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 8), padx=10, pady=3
-            )
-            btn_copy.pack(side=tk.LEFT, padx=14, pady=(0, 12))
+            val_row = tk.Frame(card, bg=C_CARD)
+            val_row.pack(fill=tk.X, padx=12, pady=(0, 10))
+
+            tk.Label(val_row, text=val_txt, font=("Consolas", 10, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack(side=tk.LEFT)
+
+            btn_copy = create_modern_button(val_row, "📋 کپی", lambda v=val_txt: self.copy_to_clipboard(v),
+                                             bg=C_SLATE, hover_bg=C_BLUE, font=("Segoe UI", 8), padx=8, pady=2)
+            btn_copy.pack(side=tk.RIGHT)
 
     def copy_to_clipboard(self, text):
         self.clipboard_clear()
         self.clipboard_append(text)
-        messagebox.showinfo("کپی شد", f"متن با موفقیت کپی شد:\n{text}")
+        messagebox.showinfo("کپی شد", f"مقدار زیر در حافظه کلیپ‌بورد کپی شد:\n\n{text}", parent=self)
 
     def render_legal_tab(self):
-        """Tab 3: Clinical disclaimer and upstream attribution."""
-        container = tk.Frame(self.content_frame, bg=C_CANVAS)
-        container.pack(fill=tk.BOTH, expand=True)
-
         # Clinical Disclaimer Warning Card
-        alert_card = tk.Frame(container, bg="#1c1917", bd=1, relief=tk.SOLID, highlightbackground=C_AMBER, highlightthickness=1)
-        alert_card.pack(fill=tk.X, pady=(0, 14))
+        alert_box = tk.Frame(self.content_frame, bg="#2d1c07", bd=1, relief=tk.SOLID,
+                             highlightbackground="#b45309", highlightthickness=1)
+        alert_box.pack(fill=tk.X, padx=4, pady=(0, 12))
 
-        tk.Label(alert_card, text="⚠ بیانیه بالینی و سلب مسئولیت پزشکی", font=("Segoe UI", 11, "bold"),
-                 fg=C_AMBER, bg="#1c1917", anchor=tk.E).pack(fill=tk.X, padx=18, pady=(14, 6))
+        tk.Label(alert_box, text="⚠ بیانیه بالینی و سلب مسئولیت پزشکی (Clinical Disclaimer)",
+                 font=("Segoe UI", 10, "bold"), fg="#fbbf24", bg="#2d1c07").pack(anchor=tk.W, padx=14, pady=(10, 4))
 
-        tk.Label(alert_card, text=(
-            "این نرم‌افزار یک ابزار پردازش تصویر است و خروجی آن به‌تنهایی جایگزین بررسی تصاویر اصلی، "
-            "تفسیر پزشک رادیولوژیست یا تصمیم‌گیری بالینی نیست."
-        ), font=("Segoe UI", 10, "bold"), fg="#fef3c7", bg="#1c1917", justify=tk.RIGHT, wraplength=760).pack(fill=tk.X, padx=18, pady=(0, 14))
-
-        # Upstream Attribution Card
-        attr_card = tk.Frame(container, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, highlightthickness=1)
-        attr_card.pack(fill=tk.BOTH, expand=True)
-
-        tk.Label(attr_card, text="🏛️ منبع اصلی پروژه و حقوق مالکیت", font=("Segoe UI", 11, "bold"),
-                 fg=C_CYAN, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, padx=18, pady=(14, 6))
-
-        t1 = (
-            "این نرم‌افزار بر پایه پروژه اصلی Bone Suppression ارائه‌شده توسط مجموعه Qure.ai توسعه یافته است.\n\n"
-            f"منبع اصلی پروژه و مدل:\n{UPSTREAM_SOURCE}\n\n"
-            "با احترام به حقوق مالکیت فکری پدیدآورندگان اصلی، کلیه حقوق مربوط به کد، مدل و اجزای متعلق به "
-            "پروژه اصلی تابع مجوز و شرایط اعلام‌شده توسط صاحبان آن است.\n\n"
-            "نقش اینجانب، آرام مصطفائی، توسعه و آماده‌سازی نرم‌افزار برای اجرا در سیستم‌عامل ویندوز و "
-            "فراهم‌کردن امکان استفاده از آن در قالب یک برنامه دسکتاپ بوده است.\n\n"
-            "این نسخه با هدف تسهیل اجرای نرم‌افزار در محیط ویندوز تهیه شده و به‌عنوان نسخه‌ای مستقل از نظر "
-            "بسته‌بندی و اجرا ارائه می‌شود؛ این موضوع به‌معنای مالکیت اینجانب بر مدل یا کد اصلی پروژه نیست.\n\n"
-            "از مجموعه Qure.ai و تمامی افرادی که در توسعه و انتشار این پروژه مشارکت داشته‌اند، قدردانی می‌کنم."
+        disclaimer_text = (
+            "این نرم‌افزار و کلیه خروجی‌های آن (حذف استخوان، کشف شکستگی و غربالگری ۱۸ بیماری) به عنوان یک ابزار کمک‌تشخیصی "
+            "و پردازش تصویر رادیولوژی عرضه شده است. تصمیم‌گیری نهایی درمانی منحصراً بر عهده پزشک معالج و رادیولوژیست متخصص "
+            "بوده و این سامانه جایگزین بررسی بالینی و تفسیر گزارش پزشکی رسمی نخواهد بود."
         )
-        tk.Label(attr_card, text=t1, font=("Segoe UI", 9), fg=C_TEXT_LIGHT, bg=C_CARD,
-                 justify=tk.RIGHT, wraplength=760).pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 14))
+        tk.Label(alert_box, text=disclaimer_text, font=("Segoe UI", 8), fg="#fef3c7", bg="#2d1c07",
+                 justify=tk.RIGHT, wraplength=720).pack(fill=tk.X, padx=14, pady=(0, 12))
+
+        # AI Models Origin & Citations Card
+        card_origin = tk.Frame(self.content_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                               highlightbackground=C_BORDER, highlightthickness=1)
+        card_origin.pack(fill=tk.X, padx=4, pady=4)
+
+        tk.Label(card_origin, text="🏛️ مراجع علمی و مجوزهای هوش مصنوعی:",
+                 font=("Segoe UI", 10, "bold"), fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W, padx=16, pady=(12, 6))
+
+        sources = (
+            "۱. مدل حذف استخوان: Qure.ai (arXiv:2609.24937) - تحت لایسنس پژوهشی غیرتجاری CC BY-NC-SA 4.0\n"
+            "۲. مدل غربالگری شکستگی: FracAtlas Dataset & YOLOv8 Research Split\n"
+            "۳. مدل ۱۸ بیماری قفسه سینه: TorchXRayVision (DenseNet-121) دانشگاه استنفورد، مونترال و تورنتو\n"
+            "۴. بسته‌بندی، مهندسی دسکتاپ و رابط کاربری: آرام مصطفائی (بیمارستان بوعلی مریوان)"
+        )
+        tk.Label(card_origin, text=sources, font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD,
+                 justify=tk.RIGHT, wraplength=720).pack(fill=tk.X, padx=16, pady=(0, 12))
 
 
 # -----------------------------------------------------------------------------
-# Main Application Class
+# 2. Main Desktop Application Window
 # -----------------------------------------------------------------------------
 class BoneSuppressionApp(tk.Tk):
-    """BoneSuppression AI Desktop Workstation with animated splash, modern UI, and hospital branding."""
+    """BoneSuppression AI Desktop Workstation with integrated multi-AI suites and dockable sidebar."""
     def __init__(self):
         super().__init__()
-        self.title("BoneSuppression AI - Chest X-Ray Studio | بیمارستان بوعلی مریوان")
-        self.geometry("1280x850")
-        self.minsize(1050, 720)
+        self.title("BoneSuppression AI - Multi-AI Chest Studio | بیمارستان بوعلی مریوان")
+        self.geometry("1320x860")
+        self.minsize(1100, 720)
         self.configure(bg=C_CANVAS)
 
         # Center main window on launch
         self.update_idletasks()
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        x = max(0, (sw - 1280) // 2)
-        y = max(0, (sh - 850) // 2)
-        self.geometry(f"1280x850+{x}+{y}")
+        x = max(0, (sw - 1320) // 2)
+        y = max(0, (sh - 860) // 2)
+        self.geometry(f"1320x860+{x}+{y}")
 
+        # Image state
         self.current_image_path = None
         self.original_np = None
         self.soft_np = None
@@ -431,14 +449,29 @@ class BoneSuppressionApp(tk.Tk):
         self.lung_np = None
         self.nonlung_np = None
 
+        # Multi-AI Models state
+        self.device = "cuda" if (torch and torch.cuda.is_available()) else "cpu"
         self.bone_model = None
         self.lung_model = None
-        self.device = "cuda" if (torch and torch.cuda.is_available()) else "cpu"
+        self.fracture_net = None
+        self.pathology_model = None
 
+        # Active AI Module: "suppress" (حذف استخوان), "fracture" (شکستگی), "pathology" (۱۸ بیماری)
+        self.active_ai_module = tk.StringVar(value="suppress")
+
+        # Results state
+        self.fracture_findings = []
+        self.pathology_findings = []
+        self.show_fracture_boxes = tk.BooleanVar(value=True)
+        self.edge_boost_var = tk.BooleanVar(value=False)
+        self.invert_display_var = tk.BooleanVar(value=False)
+
+        # Viewer state
         self.view_mode = tk.StringVar(value="split")
         self.stretch_var = tk.BooleanVar(value=True)
         self.auto_invert_var = tk.BooleanVar(value=True)
         self.slider_pos = tk.DoubleVar(value=0.5)
+        self.sidebar_visible = True
 
         # Container hierarchy
         self.splash_container = tk.Frame(self, bg=C_CANVAS)
@@ -453,185 +486,162 @@ class BoneSuppressionApp(tk.Tk):
         self.show_splash()
 
     # -------------------------------------------------------------------------
-    # 1. Animated Hierarchical Splash Screen
+    # Splash Screen
     # -------------------------------------------------------------------------
     def init_splash_ui(self):
-        """Constructs the elegant hierarchical tree splash container."""
-        center_box = tk.Frame(self.splash_container, bg=C_CANVAS)
-        center_box.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        self.splash_frame = tk.Frame(self.splash_container, bg=C_CANVAS)
+        self.splash_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        card = tk.Frame(center_box, bg=C_CARD, bd=1, relief=tk.SOLID,
-                        highlightbackground=C_BORDER, highlightthickness=1, padx=44, pady=36)
-        card.pack()
+        tk.Label(self.splash_frame, text="🫁", font=("Segoe UI", 48), bg=C_CANVAS).pack(pady=(0, 6))
 
-        # Medical Pulse Logo
-        tk.Label(card, text="🫁", font=("Segoe UI", 42), bg=C_CARD, fg=C_CYAN).pack(pady=(0, 4))
-        tk.Label(card, text="BoneSuppression AI", font=("Segoe UI", 16, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack()
-        tk.Label(card, text="سامانه هوشمند تفکیک استخوان در رادیوگرافی قفسه سینه", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_CARD).pack(pady=(2, 14))
+        tk.Label(self.splash_frame, text="BoneSuppression AI Workstation",
+                 font=("Segoe UI", 20, "bold"), fg=C_CYAN, bg=C_CANVAS).pack()
+        tk.Label(self.splash_frame, text="سامانه جامع هوش مصنوعی تصویربرداری قفسه سینه",
+                 font=("Segoe UI", 11), fg=C_TEXT_LIGHT, bg=C_CANVAS).pack(pady=(2, 16))
 
-        # Thin divider
-        tk.Frame(card, bg=C_BORDER_SUBTLE, height=1, width=420).pack(pady=4)
+        # Hierarchical Tree Box
+        self.tree_box = tk.Frame(self.splash_frame, bg=C_CARD, bd=1, relief=tk.SOLID,
+                                 highlightbackground=C_BORDER, highlightthickness=1, padx=24, pady=16)
+        self.tree_box.pack(pady=10)
 
-        # Tree Container (Nodes will appear sequentially)
-        self.tree_frame = tk.Frame(card, bg=C_CARD, width=420)
-        self.tree_frame.pack(fill=tk.X, pady=16)
+        self.tree_nodes = [
+            ("🏛️  شبکه بهداشت و درمان مریوان", "#38bdf8", ("Segoe UI", 11, "bold")),
+            ("└── 🏥  بیمارستان بوعلی", "#818cf8", ("Segoe UI", 10, "bold")),
+            ("    └── 🩻  واحد امور تصویربرداری", "#34d399", ("Segoe UI", 10, "bold")),
+            ("        └── 👨‍💻  توسعه و آماده‌سازی: آرام مصطفائی", "#fcd34d", ("Segoe UI", 9, "bold")),
+        ]
+        self.tree_labels = []
+        for text, color, font in self.tree_nodes:
+            lbl = tk.Label(self.tree_box, text="", font=font, fg=color, bg=C_CARD, anchor=tk.W)
+            lbl.pack(fill=tk.X, pady=3)
+            self.tree_labels.append((lbl, text))
 
-        # Node 1: Health Network
-        self.node1 = tk.Frame(self.tree_frame, bg=C_CARD)
-        tk.Label(self.node1, text="🏛️", font=("Segoe UI", 12), bg=C_CARD).pack(side=tk.RIGHT, padx=(6, 0))
-        tk.Label(self.node1, text="شبکه بهداشت و درمان مریوان", font=("Segoe UI", 12, "bold"), fg=C_CYAN, bg=C_CARD).pack(side=tk.RIGHT)
+        self.splash_status = tk.Label(self.splash_frame, text="در حال آماده‌سازی ماژول‌های هوش مصنوعی...",
+                                      font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_CANVAS)
+        self.splash_status.pack(pady=(12, 6))
 
-        # Node 2: Hospital (Indented Branch)
-        self.node2 = tk.Frame(self.tree_frame, bg=C_CARD)
-        tk.Label(self.node2, text="└── 🏥 بیمارستان بوعلی", font=("Segoe UI", 11, "bold"), fg="#10b981", bg=C_CARD).pack(side=tk.RIGHT, padx=(0, 24))
+        self.splash_progress = ttk.Progressbar(self.splash_frame, mode="indeterminate", length=360)
+        self.splash_progress.pack(pady=4)
 
-        # Node 3: Imaging Unit (Indented Branch)
-        self.node3 = tk.Frame(self.tree_frame, bg=C_CARD)
-        tk.Label(self.node3, text="└── 🩻 واحد امور تصویربرداری", font=("Segoe UI", 10, "bold"), fg="#38bdf8", bg=C_CARD).pack(side=tk.RIGHT, padx=(0, 48))
-
-        # Node 4: Developer (Indented Branch)
-        self.node4 = tk.Frame(self.tree_frame, bg=C_CARD)
-        tk.Label(self.node4, text="└── 👨‍💻 آرام مصطفائی", font=("Segoe UI", 10, "bold"), fg=C_AMBER, bg=C_CARD).pack(side=tk.RIGHT, padx=(0, 72))
-
-        # Progress indicator
-        self.splash_status = tk.Label(card, text="آماده‌سازی ماژول‌های پردازش هوش مصنوعی...", font=("Segoe UI", 8), fg=C_TEXT_DIM, bg=C_CARD)
-        self.splash_status.pack(pady=(12, 10))
-
-        # Direct Continue / Skip Button
-        btn_skip = create_modern_button(card, "ورود مستقیم (Skip ➔)", self.end_splash,
-                                        bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 8), padx=16, pady=4)
-        btn_skip.pack()
+        btn_skip = create_modern_button(self.splash_frame, "ورود مستقیم ➔", self.end_splash,
+                                        bg=C_SLATE, hover_bg=C_BLUE, font=("Segoe UI", 9), padx=16, pady=4)
+        btn_skip.pack(pady=(14, 0))
 
     def show_splash(self):
-        self.main_container.pack_forget()
-        self.login_container.pack_forget()
         self.splash_container.pack(fill=tk.BOTH, expand=True)
+        self.splash_progress.start(10)
+        self.splash_step(0)
 
-        # Key shortcut to skip anytime
-        self.bind("<Return>", lambda e: self.end_splash())
-        self.bind("<space>", lambda e: self.end_splash())
-
-        # Staggered animation sequence
-        self.after(300, lambda: self.node1.pack(fill=tk.X, pady=3))
-        self.after(850, lambda: self.node2.pack(fill=tk.X, pady=3))
-        self.after(1400, lambda: self.node3.pack(fill=tk.X, pady=3))
-        self.after(1950, lambda: self.node4.pack(fill=tk.X, pady=3))
-        self.after(2500, lambda: self.splash_status.config(text="● هسته هوش مصنوعی آماده اتصال است", fg="#10b981"))
-        self.after(3100, self.end_splash)
+    def splash_step(self, step):
+        if not self.splash_container.winfo_ismapped():
+            return
+        if step < len(self.tree_labels):
+            lbl, full_text = self.tree_labels[step]
+            lbl.config(text=full_text)
+            msgs = [
+                "اتصال به شبکه بهداشت و درمان مریوان...",
+                "بارگذاری سرویس‌های بیمارستان بوعلی...",
+                "آماده‌سازی ماژول‌های رادیولوژی و پردازش تصویر...",
+                "تأیید هویت کاربری و بارگذاری ورک‌استیشن..."
+            ]
+            self.splash_status.config(text=msgs[step])
+            self.after(550, lambda: self.splash_step(step + 1))
+        else:
+            self.splash_status.config(text="✓ سامانه آماده به کار است. ورود به برنامه...")
+            self.after(700, self.end_splash)
 
     def end_splash(self):
-        self.unbind("<Return>")
-        self.unbind("<space>")
+        try:
+            self.splash_progress.stop()
+        except Exception:
+            pass
         self.splash_container.pack_forget()
         self.show_login_view()
 
     # -------------------------------------------------------------------------
-    # 2. Modern Clinical Login Card
+    # Authentication & Access Control
     # -------------------------------------------------------------------------
     def init_login_ui(self):
-        """Constructs the sleek login screen inside login_container."""
-        center_box = tk.Frame(self.login_container, bg=C_CANVAS)
-        center_box.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        card = tk.Frame(self.login_container, bg=C_CARD, bd=1, relief=tk.SOLID,
+                        highlightbackground=C_BORDER, highlightthickness=1, padx=36, pady=32)
+        card.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-        card = tk.Frame(center_box, bg=C_CARD, bd=1, relief=tk.SOLID,
-                        highlightbackground=C_BORDER, highlightthickness=1, padx=36, pady=28)
-        card.pack()
+        tk.Label(card, text="🔒", font=("Segoe UI", 36), bg=C_CARD).pack(pady=(0, 4))
+        tk.Label(card, text="ورود به سامانه رادیولوژی", font=("Segoe UI", 14, "bold"), fg=C_CYAN, bg=C_CARD).pack()
+        tk.Label(card, text=f"{HOSPITAL_TITLE} - {DEVELOPER_NAME}",
+                 font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_CARD).pack(pady=(2, 18))
 
-        tk.Label(card, text="🏥", font=("Segoe UI", 34), bg=C_CARD, fg=C_CYAN).pack(pady=(4, 2))
-        tk.Label(card, text=HOSPITAL_TITLE, font=("Segoe UI", 13, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack()
-        tk.Label(card, text=f"{NETWORK_TITLE} - {DEVELOPER_ROLE}", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_CARD).pack(pady=(2, 10))
-
-        tk.Frame(card, bg=C_BORDER_SUBTLE, height=1, width=380).pack(pady=4)
-
-        tk.Label(card, text="🫁 BoneSuppression AI - ورود به سامانه", font=("Segoe UI", 12, "bold"), fg=C_CYAN, bg=C_CARD).pack(pady=(8, 2))
-        tk.Label(card, text="جهت دسترسی به محیط استودیو، مشخصات ورود را درج فرمایید", font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD).pack(pady=(0, 16))
-
-        form = tk.Frame(card, bg=C_CARD, width=360)
+        form = tk.Frame(card, bg=C_CARD)
         form.pack(fill=tk.X)
 
-        tk.Label(form, text="نام کاربری (Username):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
-        self.entry_user = tk.Entry(form, font=("Segoe UI", 10), bg="#0b0f19", fg="white",
-                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
-        self.entry_user.pack(fill=tk.X, ipady=6, pady=(0, 10))
-        self.entry_user.insert(0, DEFAULT_USER)
+        tk.Label(form, text="شناسه کاربری (Username):", font=("Segoe UI", 9, "bold"),
+                 fg=C_TEXT_LIGHT, bg=C_CARD).pack(anchor=tk.W, pady=(4, 2))
+        self.ent_user = tk.Entry(form, font=("Consolas", 11), bg="#0b0f19", fg=C_TEXT_LIGHT,
+                                 insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1,
+                                 highlightbackground=C_BORDER, highlightcolor=C_CYAN)
+        self.ent_user.pack(fill=tk.X, pady=(0, 10), ipady=5)
+        self.ent_user.insert(0, DEFAULT_USER)
 
-        tk.Label(form, text="رمز عبور (Password):", font=("Segoe UI", 9, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD, anchor=tk.E).pack(fill=tk.X, pady=(4, 2))
-        self.entry_pass = tk.Entry(form, font=("Segoe UI", 10), show="•", bg="#0b0f19", fg="white",
-                                   insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1, highlightbackground=C_BORDER)
-        self.entry_pass.pack(fill=tk.X, ipady=6, pady=(0, 6))
+        tk.Label(form, text="رمز عبور (Password):", font=("Segoe UI", 9, "bold"),
+                 fg=C_TEXT_LIGHT, bg=C_CARD).pack(anchor=tk.W, pady=(4, 2))
+        self.ent_pass = tk.Entry(form, font=("Consolas", 11), show="•", bg="#0b0f19", fg=C_TEXT_LIGHT,
+                                 insertbackground="white", bd=1, relief=tk.SOLID, highlightthickness=1,
+                                 highlightbackground=C_BORDER, highlightcolor=C_CYAN)
+        self.ent_pass.pack(fill=tk.X, pady=(0, 6), ipady=5)
+        self.ent_pass.insert(0, DEFAULT_PASS)
+        self.ent_pass.bind("<Return>", self.on_login_attempt)
 
-        self.err_label = tk.Label(form, text="", font=("Segoe UI", 9, "bold"), fg=C_RED_HOVER, bg=C_CARD)
-        self.err_label.pack(fill=tk.X, pady=(2, 6))
+        self.login_err = tk.Label(card, text="", font=("Segoe UI", 8), fg="#f87171", bg=C_CARD)
+        self.login_err.pack(pady=4)
 
-        btn_box = tk.Frame(card, bg=C_CARD)
-        btn_box.pack(fill=tk.X, pady=(6, 12))
-
-        btn_login = create_modern_button(btn_box, "✓ ورود به سامانه", self.on_login_attempt,
-                                         bg=C_GREEN, hover_bg=C_GREEN_HOVER, font=("Segoe UI", 10, "bold"), pady=8)
-        btn_login.pack(fill=tk.X, pady=(0, 8))
-
-        self.entry_user.bind("<Return>", self.on_login_attempt)
-        self.entry_pass.bind("<Return>", self.on_login_attempt)
-
-        footer = tk.Frame(card, bg=C_CARD)
-        footer.pack(fill=tk.X, pady=(8, 0))
-        tk.Label(footer, text=f"توسعه و آماده‌سازی دسکتاپ: {DEVELOPER_NAME}", font=("Segoe UI", 8), fg=C_TEXT_DIM, bg=C_CARD).pack()
+        btn_login = create_modern_button(card, "ورود به ورک‌استیشن ➔", self.on_login_attempt,
+                                         bg=C_BLUE, hover_bg=C_BLUE_HOVER, font=("Segoe UI", 10, "bold"), padx=20, pady=8)
+        btn_login.pack(fill=tk.X, pady=(6, 0))
 
     def show_login_view(self):
-        self.splash_container.pack_forget()
-        self.main_container.pack_forget()
         self.login_container.pack(fill=tk.BOTH, expand=True)
-        self.entry_pass.delete(0, tk.END)
-        self.err_label.config(text="")
-        self.entry_user.focus_set()
+        self.ent_pass.focus_set()
 
     def check_credentials(self, username, password):
-        u = username.strip().lower()
-        p = password.strip()
-        if u == DEFAULT_USER.lower() and (p == DEFAULT_PASS or hashlib.sha256(p.encode()).hexdigest() == DEFAULT_PASS_HASH):
-            return True
-
-        if os.path.exists(CONFIG_PATH):
-            try:
+        try:
+            if os.path.isfile(CONFIG_PATH):
                 with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                 auth = cfg.get("auth", {})
-                cfg_u = auth.get("username", "").strip().lower()
-                cfg_p = auth.get("initial_password_plain", "")
-                cfg_h = auth.get("password_hash", "")
-                if cfg_u and u == cfg_u:
-                    if p == cfg_p or hashlib.sha256(p.encode()).hexdigest() == cfg_h:
-                        return True
-            except Exception:
-                pass
-        return False
+                if not auth.get("enabled", True):
+                    return True
+                target_user = auth.get("username", DEFAULT_USER)
+                target_hash = auth.get("password_hash", DEFAULT_PASS_HASH)
+                inp_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                return (username.strip() == target_user and inp_hash == target_hash)
+        except Exception:
+            pass
+        return (username.strip() == DEFAULT_USER and password == DEFAULT_PASS)
 
     def on_login_attempt(self, event=None):
-        u = self.entry_user.get()
-        p = self.entry_pass.get()
+        u = self.ent_user.get()
+        p = self.ent_pass.get()
         if self.check_credentials(u, p):
+            self.login_err.config(text="")
+            self.login_container.pack_forget()
             self.show_workstation_view()
         else:
-            self.err_label.config(text="❌ نام کاربری یا رمز عبور اشتباه است!")
-            self.entry_pass.delete(0, tk.END)
-            self.entry_pass.focus_set()
+            self.login_err.config(text="نام کاربری یا کلمه عبور نادرست است.")
 
     def on_logout(self):
-        if messagebox.askyesno("خروج از سامانه", "آیا می‌خواهید از سامانه خارج شوید؟"):
-            self.show_login_view()
+        self.main_container.pack_forget()
+        self.show_login_view()
 
     def show_workstation_view(self):
-        self.splash_container.pack_forget()
-        self.login_container.pack_forget()
         self.main_container.pack(fill=tk.BOTH, expand=True)
         self.check_models()
-        self.render_view()
+        self.after(200, self.render_view)
 
     # -------------------------------------------------------------------------
-    # 3. Workstation UI & Radiograph Processing
+    # Workstation UI & Multi-AI Sidebar
     # -------------------------------------------------------------------------
     def init_workstation_ui(self):
-        # Header Bar
+        # 1. Header Bar
         header_bar = tk.Frame(self.main_container, bg=C_HEADER, height=44, bd=0)
         header_bar.pack(fill=tk.X, side=tk.TOP)
 
@@ -658,7 +668,7 @@ class BoneSuppressionApp(tk.Tk):
 
         tk.Frame(self.main_container, bg=C_BORDER, height=1).pack(fill=tk.X, side=tk.TOP)
 
-        # Toolbar
+        # 2. Main Toolbar
         toolbar = tk.Frame(self.main_container, bg=C_TOOLBAR, height=48)
         toolbar.pack(fill=tk.X, side=tk.TOP, padx=0, pady=0)
 
@@ -666,30 +676,38 @@ class BoneSuppressionApp(tk.Tk):
                                         bg=C_BLUE, hover_bg=C_BLUE_HOVER, font=("Segoe UI", 9, "bold"), padx=14, pady=6)
         btn_open.pack(side=tk.LEFT, padx=(14, 6), pady=8)
 
-        btn_run = create_modern_button(toolbar, "⚡ اجرای جداسازی استخوان", self.run_inference,
-                                       bg=C_GREEN, hover_bg=C_GREEN_HOVER, font=("Segoe UI", 9, "bold"), padx=16, pady=6)
-        btn_run.pack(side=tk.LEFT, padx=6, pady=8)
-
-        btn_batch = create_modern_button(toolbar, "📁 پردازش گروهی پوشه", self.batch_process,
-                                         bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9), padx=12, pady=6)
-        btn_batch.pack(side=tk.LEFT, padx=6, pady=8)
+        self.btn_run_active = create_modern_button(toolbar, "⚡ اجرای جداسازی استخوان", self.run_active_engine,
+                                                   bg=C_GREEN, hover_bg=C_GREEN_HOVER, font=("Segoe UI", 9, "bold"), padx=16, pady=6)
+        self.btn_run_active.pack(side=tk.LEFT, padx=6, pady=8)
 
         btn_save = create_modern_button(toolbar, "💾 ذخیره نتایج", self.save_results,
                                         bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9), padx=12, pady=6)
         btn_save.pack(side=tk.LEFT, padx=6, pady=8)
 
+        btn_batch = create_modern_button(toolbar, "📁 پردازش گروهی پوشه", self.batch_process,
+                                         bg=C_SLATE, hover_bg=C_SLATE_HOVER, font=("Segoe UI", 9), padx=12, pady=6)
+        btn_batch.pack(side=tk.LEFT, padx=6, pady=8)
+
+        btn_toggle_sidebar = create_modern_button(toolbar, "🩺 سایدبار هوش مصنوعی", self.toggle_sidebar,
+                                                  bg=C_SLATE, hover_bg=C_BLUE, font=("Segoe UI", 9), padx=10, pady=6)
+        btn_toggle_sidebar.pack(side=tk.LEFT, padx=6, pady=8)
+
         dev_frame = tk.Frame(toolbar, bg=C_TOOLBAR)
         dev_frame.pack(side=tk.RIGHT, padx=14, pady=8)
 
-        tk.Label(dev_frame, text="سخت‌افزار پردازش:", fg=C_TEXT_MUTED, bg=C_TOOLBAR, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=6)
+        tk.Label(dev_frame, text="سخت‌افزار:", fg=C_TEXT_MUTED, bg=C_TOOLBAR, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=6)
         self.dev_combo = ttk.Combobox(dev_frame, values=["cuda", "cpu"], width=7, state="readonly", font=("Segoe UI", 9))
         self.dev_combo.set(self.device)
         self.dev_combo.pack(side=tk.LEFT)
         self.dev_combo.bind("<<ComboboxSelected>>", self.on_device_change)
 
-        # Viewport Canvas
-        self.canvas_frame = tk.Frame(self.main_container, bg=C_CANVAS, bd=0)
-        self.canvas_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 4))
+        # 3. Middle Work Area (Viewer Canvas on Left + Dockable Radiology AI Sidebar on Right)
+        self.work_area = tk.Frame(self.main_container, bg=C_CANVAS)
+        self.work_area.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        # Viewer Canvas Frame
+        self.canvas_frame = tk.Frame(self.work_area, bg=C_CANVAS, bd=0)
+        self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
         self.canvas = tk.Canvas(self.canvas_frame, bg="#000000", highlightthickness=1, highlightbackground=C_BORDER)
         self.canvas.pack(fill=tk.BOTH, expand=True)
@@ -697,7 +715,15 @@ class BoneSuppressionApp(tk.Tk):
         self.canvas.bind("<Button-1>", self.on_slider_click)
         self.canvas.bind("<Configure>", self.on_resize)
 
-        # Bottom Bar
+        # Specialized Radiology Sidebar Frame
+        self.sidebar_frame = tk.Frame(self.work_area, bg=C_CARD, width=340, bd=1, relief=tk.SOLID,
+                                      highlightbackground=C_BORDER, highlightthickness=1)
+        self.sidebar_frame.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
+        self.sidebar_frame.pack_propagate(False)
+
+        self.init_sidebar_content()
+
+        # 4. Bottom Navigation & Status Bar
         bottom_bar = tk.Frame(self.main_container, bg=C_HEADER, height=44, bd=1, relief=tk.SOLID,
                               highlightbackground=C_BORDER, highlightthickness=1)
         bottom_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=0, pady=0)
@@ -717,211 +743,583 @@ class BoneSuppressionApp(tk.Tk):
                        command=self.render_view, bg=C_HEADER, fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
                        activebackground=C_HEADER, activeforeground=C_CYAN, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=8)
 
-        settings_box = tk.Frame(bottom_bar, bg=C_HEADER)
-        settings_box.pack(side=tk.LEFT, padx=12, pady=6)
+        self.status_label = tk.Label(bottom_bar, text="آماده جهت بارگذاری کلیشه رادیوگرافی",
+                                     font=("Segoe UI", 9), fg=C_CYAN, bg=C_HEADER)
+        self.status_label.pack(side=tk.RIGHT, padx=14, pady=6)
 
-        tk.Checkbutton(settings_box, text="بهبود کنتراست (0.5-99.5%)", variable=self.stretch_var, command=self.render_view,
-                       bg=C_HEADER, fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
-                       activebackground=C_HEADER, activeforeground=C_CYAN, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=8)
+    def init_sidebar_content(self):
+        # Header of Sidebar
+        sb_head = tk.Frame(self.sidebar_frame, bg=C_TOOLBAR, height=40)
+        sb_head.pack(fill=tk.X)
+        tk.Label(sb_head, text="🩺 جعبه‌ابزار تخصصی هوش مصنوعی", font=("Segoe UI", 10, "bold"),
+                 fg=C_CYAN, bg=C_TOOLBAR).pack(side=tk.LEFT, padx=12, pady=8)
 
-        tk.Checkbutton(settings_box, text="تشخیص خودکار جهت قطبیت (Auto Invert)", variable=self.auto_invert_var,
-                       bg=C_HEADER, fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
-                       activebackground=C_HEADER, activeforeground=C_CYAN, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=8)
+        # Segmented AI Module Selector
+        selector_frame = tk.Frame(self.sidebar_frame, bg=C_CARD, pady=8)
+        selector_frame.pack(fill=tk.X, padx=8)
 
-        self.status_label = tk.Label(bottom_bar, text="آماده به کار", font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER)
-        self.status_label.pack(side=tk.RIGHT, padx=16, pady=6)
+        self.mod_btns = {}
+        modules = [
+            ("suppress", "🩻 بافت نرم"),
+            ("fracture", "🦴 شکستگی"),
+            ("pathology", "🫁 ۱۸ بیماری"),
+        ]
+        for mod_id, mod_label in modules:
+            b = tk.Button(selector_frame, text=mod_label, font=("Segoe UI", 8, "bold" if mod_id == "suppress" else "normal"),
+                          bg=C_BLUE if mod_id == "suppress" else C_SLATE, fg="white",
+                          activebackground=C_BLUE_HOVER, relief=tk.FLAT, bd=0, padx=6, pady=5, cursor="hand2",
+                          command=lambda m=mod_id: self.select_ai_module(m))
+            b.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+            self.mod_btns[mod_id] = b
 
+        tk.Frame(self.sidebar_frame, bg=C_BORDER_SUBTLE, height=1).pack(fill=tk.X, padx=8, pady=4)
+
+        # Dynamic Results & Controls Frame
+        self.sb_body = tk.Frame(self.sidebar_frame, bg=C_CARD)
+        self.sb_body.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        # Bottom Clinical Image Adjustments Card
+        tools_card = tk.Frame(self.sidebar_frame, bg="#0d1424", bd=1, relief=tk.SOLID,
+                              highlightbackground=C_BORDER, highlightthickness=1, padx=10, pady=8)
+        tools_card.pack(fill=tk.X, side=tk.BOTTOM, padx=8, pady=8)
+
+        tk.Label(tools_card, text="⚙️ تنظیمات نمایش تصویر بالینی:", font=("Segoe UI", 8, "bold"),
+                 fg=C_TEXT_MUTED, bg="#0d1424").pack(anchor=tk.W, pady=(0, 4))
+
+        tk.Checkbutton(tools_card, text="بهبود خودکار کنتراست (0.5-99.5%)", variable=self.stretch_var,
+                       command=self.render_view, bg="#0d1424", fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
+                       activebackground="#0d1424", activeforeground=C_CYAN, font=("Segoe UI", 8)).pack(anchor=tk.W)
+
+        tk.Checkbutton(tools_card, text="تقویت لبه و استخوان (Edge Boost)", variable=self.edge_boost_var,
+                       command=self.render_view, bg="#0d1424", fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
+                       activebackground="#0d1424", activeforeground=C_CYAN, font=("Segoe UI", 8)).pack(anchor=tk.W)
+
+        tk.Checkbutton(tools_card, text="معکوس‌سازی قطبیت (Invert Polarity)", variable=self.invert_display_var,
+                       command=self.render_view, bg="#0d1424", fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
+                       activebackground="#0d1424", activeforeground=C_CYAN, font=("Segoe UI", 8)).pack(anchor=tk.W)
+
+        self.refresh_sidebar_ui()
+
+    def toggle_sidebar(self):
+        if self.sidebar_visible:
+            self.sidebar_frame.pack_forget()
+            self.sidebar_visible = False
+        else:
+            self.sidebar_frame.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
+            self.sidebar_visible = True
+        self.render_view()
+
+    def select_ai_module(self, mod_id):
+        self.active_ai_module.set(mod_id)
+        for mid, btn in self.mod_btns.items():
+            if mid == mod_id:
+                btn.config(bg=C_BLUE, font=("Segoe UI", 8, "bold"))
+            else:
+                btn.config(bg=C_SLATE, font=("Segoe UI", 8, "normal"))
+
+        # Update Main Run Button Text
+        if mod_id == "suppress":
+            self.btn_run_active.config(text="⚡ اجرای جداسازی استخوان", bg=C_GREEN, activebackground=C_GREEN_HOVER)
+        elif mod_id == "fracture":
+            self.btn_run_active.config(text="🦴 کشف شکستگی‌ها (Fracture AI)", bg="#d97706", activebackground="#f59e0b")
+        elif mod_id == "pathology":
+            self.btn_run_active.config(text="🫁 غربالگری ۱۸ بیماری ریه", bg="#7c3aed", activebackground="#8b5cf6")
+
+        self.refresh_sidebar_ui()
+        self.render_view()
+
+    def refresh_sidebar_ui(self):
+        for w in self.sb_body.winfo_children():
+            w.destroy()
+
+        mod = self.active_ai_module.get()
+        if mod == "suppress":
+            self.render_sidebar_suppress()
+        elif mod == "fracture":
+            self.render_sidebar_fracture()
+        elif mod == "pathology":
+            self.render_sidebar_pathology()
+
+    def render_sidebar_suppress(self):
+        tk.Label(self.sb_body, text="🩻 ماژول حذف استخوان (Qure.ai)", font=("Segoe UI", 9, "bold"),
+                 fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W, pady=(4, 2))
+        info_txt = "تفکیک بافت نرم ریه از ساختار متراکم استخوانی دنده‌ها و ترقوه جهت آشکارسازی ندول‌های پنهان."
+        tk.Label(self.sb_body, text=info_txt, font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD,
+                 justify=tk.RIGHT, wraplength=310).pack(anchor=tk.W, pady=(0, 8))
+
+        status_box = tk.Frame(self.sb_body, bg="#0d1424", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER)
+        status_box.pack(fill=tk.X, pady=4)
+        if self.soft_np is not None:
+            tk.Label(status_box, text="✓ پردازش با موفقیت انجام شد", font=("Segoe UI", 8, "bold"), fg="#34d399", bg="#0d1424").pack(padx=8, pady=6)
+        else:
+            tk.Label(status_box, text="منتظر اجرای پردازش با دکمه سبز بالا...", font=("Segoe UI", 8), fg=C_AMBER, bg="#0d1424").pack(padx=8, pady=6)
+
+    def render_sidebar_fracture(self):
+        tk.Label(self.sb_body, text="🦴 ماژول تشخیص شکستگی (Fracture AI)", font=("Segoe UI", 9, "bold"),
+                 fg="#f59e0b", bg=C_CARD).pack(anchor=tk.W, pady=(4, 2))
+        info_txt = "شناسایی هوشمند شکستگی، ترک استخوانی و کادربندی نئونی نواحی مشکوک با الگوریتم YOLOv8."
+        tk.Label(self.sb_body, text=info_txt, font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD,
+                 justify=tk.RIGHT, wraplength=310).pack(anchor=tk.W, pady=(0, 6))
+
+        tk.Checkbutton(self.sb_body, text="نمایش کادرهای شکستگی روی تصویر", variable=self.show_fracture_boxes,
+                       command=self.render_view, bg=C_CARD, fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
+                       activebackground=C_CARD, activeforeground=C_AMBER, font=("Segoe UI", 8, "bold")).pack(anchor=tk.W, pady=2)
+
+        results_frame = tk.Frame(self.sb_body, bg="#0d1424", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER)
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=6)
+
+        if not self.fracture_findings:
+            tk.Label(results_frame, text="هنوز پردازش شکستگی اجرا نشده است.\nروی دکمه نارنجی بالا کلیک کنید.",
+                     font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg="#0d1424", justify=tk.CENTER).pack(padx=8, pady=20)
+        else:
+            count = len(self.fracture_findings)
+            tk.Label(results_frame, text=f"تعداد شکستگی کشف‌شده: {count} مورد",
+                     font=("Segoe UI", 9, "bold"), fg="#ef4444" if count > 0 else "#34d399", bg="#0d1424").pack(anchor=tk.W, padx=8, pady=6)
+
+            for i, f in enumerate(self.fracture_findings, start=1):
+                box = f["box"]
+                conf = f["conf"]
+                card = tk.Frame(results_frame, bg="#1a1113", bd=1, relief=tk.SOLID, highlightbackground="#dc2626")
+                card.pack(fill=tk.X, padx=6, pady=3)
+                tk.Label(card, text=f"شکستگی شماره {i} | اطمینان: {conf:.1%}", font=("Segoe UI", 8, "bold"), fg="#fca5a5", bg="#1a1113").pack(anchor=tk.W, padx=6, pady=2)
+                tk.Label(card, text=f"مختصات: X=[{box[0]}-{box[2]}], Y=[{box[1]}-{box[3]}]", font=("Consolas", 7), fg=C_TEXT_MUTED, bg="#1a1113").pack(anchor=tk.W, padx=6, pady=(0, 4))
+
+    def render_sidebar_pathology(self):
+        tk.Label(self.sb_body, text="🫁 غربالگری ۱۸ بیماری ریه و قلب", font=("Segoe UI", 9, "bold"),
+                 fg="#a78bfa", bg=C_CARD).pack(anchor=tk.W, pady=(4, 2))
+
+        container = tk.Frame(self.sb_body, bg=C_CARD)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        if not self.pathology_findings:
+            box = tk.Frame(container, bg="#0d1424", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER)
+            box.pack(fill=tk.BOTH, expand=True, pady=4)
+            tk.Label(box, text="جهت استخراج گزارش ۱۸ شاخص بالینی ریه\nروی دکمه بنفش بالا کلیک فرمایید.",
+                     font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg="#0d1424", justify=tk.CENTER).pack(padx=8, pady=24)
+            return
+
+        # Summary badge
+        positives = [p for p in self.pathology_findings if p["is_positive"]]
+        summary_lbl = tk.Label(container, text=f"شاخص‌های بالاتر از آستانه بالینی: {len(positives)} از ۱۸",
+                               font=("Segoe UI", 8, "bold"), fg="#ef4444" if positives else "#34d399", bg=C_CARD)
+        summary_lbl.pack(anchor=tk.W, pady=(0, 4))
+
+        canvas = tk.Canvas(container, bg=C_CARD, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=C_CARD)
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=300)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        for p in self.pathology_findings:
+            is_pos = p["is_positive"]
+            score = p["score"]
+            card_bg = "#211218" if is_pos else "#0f172a"
+            card_border = "#dc2626" if is_pos else C_BORDER
+
+            card = tk.Frame(scrollable_frame, bg=card_bg, bd=1, relief=tk.SOLID, highlightbackground=card_border)
+            card.pack(fill=tk.X, pady=2, padx=2)
+
+            head_row = tk.Frame(card, bg=card_bg)
+            head_row.pack(fill=tk.X, padx=6, pady=(4, 1))
+
+            badge = "🔴" if is_pos else "⚪"
+            tk.Label(head_row, text=f"{badge} {p['fa']}", font=("Segoe UI", 8, "bold" if is_pos else "normal"),
+                     fg="#fca5a5" if is_pos else C_TEXT_LIGHT, bg=card_bg).pack(side=tk.LEFT)
+            tk.Label(head_row, text=f"{score:.1%}", font=("Consolas", 8, "bold"),
+                     fg="#ef4444" if is_pos else C_CYAN, bg=card_bg).pack(side=tk.RIGHT)
+
+            tk.Label(card, text=f"{p['en']} | آستانه: {p['threshold']:.1%}", font=("Segoe UI", 7),
+                     fg=C_TEXT_MUTED, bg=card_bg).pack(anchor=tk.W, padx=8, pady=(0, 3))
+
+    # -------------------------------------------------------------------------
+    # Multi-Engine Orchestrator
+    # -------------------------------------------------------------------------
+    def run_active_engine(self):
+        mod = self.active_ai_module.get()
+        if mod == "suppress":
+            self.run_suppression_inference()
+        elif mod == "fracture":
+            self.run_fracture_inference()
+        elif mod == "pathology":
+            self.run_pathology_inference()
+
+    def run_suppression_inference(self):
+        """Runs Qure.ai TorchScript bone suppression model."""
+        if self.original_np is None:
+            messagebox.showwarning("تصویر انتخاب نشده", "لطفاً ابتدا با دکمه «باز کردن تصویر»، یک عکس رادیوگرافی انتخاب کنید.")
+            return
+
+        if self.bone_model is None or self.lung_model is None:
+            if not self.load_models_eagerly():
+                return
+
+        self.status_label.config(text="در حال پردازش هوش مصنوعی حذف استخوان...", fg=C_AMBER)
+        self.update_idletasks()
+        t0 = time.time()
+
+        try:
+            arr = self.original_np
+            # Prepare tensor 1x1x1024x1024
+            if cv2 is not None:
+                resized = cv2.resize(arr, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
+            else:
+                p_img = Image.fromarray(arr).resize((SIZE, SIZE), Image.Resampling.BILINEAR)
+                resized = np.array(p_img, dtype=np.float32)
+
+            t_in = torch.from_numpy(resized).unsqueeze(0).unsqueeze(0).float().to(self.device)
+
+            with torch.no_grad():
+                bone_out = self.bone_model(t_in)
+                bone_tensor = bone_out[0] if isinstance(bone_out, (list, tuple)) else bone_out
+                soft_tensor = t_in - bone_tensor
+                lung_out = self.lung_model(soft_tensor)
+                lung_tensor = lung_out[0] if isinstance(lung_out, (list, tuple)) else lung_out
+                nonlung_tensor = soft_tensor - lung_tensor
+
+            def to_full_res(t):
+                a = t.squeeze().cpu().numpy()
+                if cv2 is not None:
+                    return cv2.resize(a, (arr.shape[1], arr.shape[0]), interpolation=cv2.INTER_CUBIC)
+                p = Image.fromarray(a).resize((arr.shape[1], arr.shape[0]), Image.Resampling.BICUBIC)
+                return np.array(p, dtype=np.float32)
+
+            self.soft_np = to_full_res(soft_tensor)
+            self.bone_np = to_full_res(bone_tensor)
+            self.lung_np = to_full_res(lung_tensor)
+            self.nonlung_np = to_full_res(nonlung_tensor)
+
+            dt = (time.time() - t0) * 1000
+            self.status_label.config(text=f"✓ جداسازی استخوان در {dt:.0f} میلی‌ثانیه انجام شد", fg="#34d399")
+            self.refresh_sidebar_ui()
+            self.render_view()
+
+        except Exception as e:
+            messagebox.showerror("خطای پردازش", f"خطا حین اجرای مدل:\n{traceback.format_exc()}")
+            self.status_label.config(text="خطا در پردازش هوش مصنوعی", fg=C_RED)
+
+    def run_fracture_inference(self):
+        """Runs YOLOv8 ONNX Bone Fracture Detection model."""
+        if self.original_np is None:
+            messagebox.showwarning("تصویر انتخاب نشده", "لطفاً ابتدا با دکمه «باز کردن تصویر»، یک عکس رادیوگرافی انتخاب کنید.")
+            return
+
+        # Find and load ONNX model via OpenCV DNN
+        if self.fracture_net is None:
+            frac_path = find_weight_file("fracture_yolov8.onnx")
+            if not os.path.isfile(frac_path):
+                messagebox.showerror("مدل یافت نشد", f"فایل مدل شکستگی یافت نشد:\n{frac_path}")
+                return
+            try:
+                self.fracture_net = cv2.dnn.readNetFromONNX(frac_path)
+            except Exception as e:
+                messagebox.showerror("خطا", f"خطا در بارگذاری مدل شکستگی:\n{e}")
+                return
+
+        self.status_label.config(text="در حال کشف شکستگی‌ها با الگوریتم YOLOv8...", fg=C_AMBER)
+        self.update_idletasks()
+        t0 = time.time()
+
+        try:
+            # Convert current display image to 3-channel RGB uint8
+            disp = self.to_display_image(self.original_np)
+            rgb = np.array(disp)
+            h, w = rgb.shape[:2]
+
+            scale = min(640.0 / h, 640.0 / w)
+            nw, nh = int(round(w * scale)), int(round(h * scale))
+            resized = cv2.resize(rgb, (nw, nh), interpolation=cv2.INTER_LINEAR)
+            canvas_img = np.zeros((640, 640, 3), dtype=np.uint8)
+            dx = (640 - nw) // 2
+            dy = (640 - nh) // 2
+            canvas_img[dy:dy+nh, dx:dx+nw] = resized
+
+            blob = cv2.dnn.blobFromImage(canvas_img, 1.0 / 255.0, (640, 640), swapRB=False)
+            self.fracture_net.setInput(blob)
+            pred = self.fracture_net.forward()[0].T  # (8400, 5)
+
+            boxes, confidences = [], []
+            conf_thresh = 0.18
+            for row in pred:
+                conf = float(row[4])
+                if conf >= conf_thresh:
+                    cx, cy, bw, bh = row[:4]
+                    x1 = int(round((cx - bw / 2.0 - dx) / scale))
+                    y1 = int(round((cy - bh / 2.0 - dy) / scale))
+                    x2 = int(round((cx + bw / 2.0 - dx) / scale))
+                    y2 = int(round((cy + bh / 2.0 - dy) / scale))
+                    x1 = max(0, min(w - 1, x1))
+                    y1 = max(0, min(h - 1, y1))
+                    x2 = max(0, min(w - 1, x2))
+                    y2 = max(0, min(h - 1, y2))
+                    boxes.append([x1, y1, x2 - x1, y2 - y1])
+                    confidences.append(conf)
+
+            indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_thresh, 0.40)
+            self.fracture_findings = []
+            if len(indices) > 0:
+                for idx in indices:
+                    i = idx if isinstance(idx, (int, np.integer)) else idx[0]
+                    bx, by, bw, bh = boxes[i]
+                    self.fracture_findings.append({
+                        "box": (bx, by, bx + bw, by + bh),
+                        "conf": confidences[i],
+                        "label": "شکستگی استخوان (Fracture)"
+                    })
+
+            dt = (time.time() - t0) * 1000
+            count = len(self.fracture_findings)
+            self.status_label.config(text=f"✓ غربالگری شکستگی در {dt:.0f} میلی‌ثانیه انجام شد ({count} مورد یافت شد)", fg="#34d399")
+            self.refresh_sidebar_ui()
+            self.render_view()
+
+        except Exception as e:
+            messagebox.showerror("خطای پردازش", f"خطا حین غربالگری شکستگی:\n{traceback.format_exc()}")
+            self.status_label.config(text="خطا در ماژول شکستگی", fg=C_RED)
+
+    def run_pathology_inference(self):
+        """Runs TorchXRayVision DenseNet-121 18 Chest & Heart Pathologies model."""
+        if self.original_np is None:
+            messagebox.showwarning("تصویر انتخاب نشده", "لطفاً ابتدا با دکمه «باز کردن تصویر»، یک عکس رادیوگرافی انتخاب کنید.")
+            return
+
+        if self.pathology_model is None:
+            p_path = find_weight_file("cxr_densenet18.ts")
+            if not os.path.isfile(p_path):
+                messagebox.showerror("مدل یافت نشد", f"فایل مدل ۱۸ بیماری ریه یافت نشد:\n{p_path}")
+                return
+            try:
+                self.pathology_model = torch.jit.load(p_path, map_location=self.device)
+                self.pathology_model.eval()
+            except Exception as e:
+                messagebox.showerror("خطا", f"خطا در بارگذاری مدل ۱۸ بیماری:\n{e}")
+                return
+
+        self.status_label.config(text="در حال تحلیل و غربالگری ۱۸ شاخص بالینی ریه و قلب...", fg=C_AMBER)
+        self.update_idletasks()
+        t0 = time.time()
+
+        try:
+            arr = self.original_np
+            # Normalize to [-1024, 1024]
+            gray_norm = (arr * 2048.0) - 1024.0
+            gh, gw = gray_norm.shape
+            min_dim = min(gh, gw)
+            cy, cx = gh // 2, gw // 2
+            crop = gray_norm[cy - min_dim // 2 : cy + min_dim // 2, cx - min_dim // 2 : cx + min_dim // 2]
+            resized = cv2.resize(crop, (224, 224), interpolation=cv2.INTER_AREA)
+
+            t_in = torch.from_numpy(resized).unsqueeze(0).unsqueeze(0).float().to(self.device)
+            with torch.no_grad():
+                raw_logits = self.pathology_model(t_in)[0].cpu().numpy()
+                sig = 1.0 / (1.0 + np.exp(-raw_logits))
+
+            op_threshs = np.array([
+                0.07422872, 0.038290843, 0.09814756, 0.0098118475, 0.023601074, 0.0022490358,
+                0.010060724, 0.103246614, 0.056810737, 0.026791653, 0.050318155, 0.023985857,
+                0.01939503, 0.042889766, 0.053369623, 0.035975814, 0.20204692, 0.05015312
+            ], dtype=np.float32)
+
+            labels_fa = [
+                'آتلکتازی (کلاپس ریه)', 'کانسولیدیشن (تراکم بافت)', 'اینفیلتراسیون (تراوش ریوی)',
+                'پنوموتوراکس (هوای جنب)', 'ادم ریوی (آب آوردن ریه)', 'آمفیزم ریوی',
+                'فیبروز ریوی', 'پلورال افیوژن (مایع جنب)', 'پنومونی (عفونت ریه)',
+                'ضخیم‌شدگی پلورا', 'کاردیومگالی (بزرگی قلب)', 'ندول ریوی (Nodule)',
+                'توده ریوی (Mass)', 'فتق دیافراگم (Hernia)', 'ضایعه موضعی ریه',
+                'شکستگی استخوان/دنده', 'کدورت منتشر ریه (Opacity)', 'بزرگی مدیاستن و قلب'
+            ]
+            labels_en = [
+                'Atelectasis', 'Consolidation', 'Infiltration', 'Pneumothorax', 'Edema',
+                'Emphysema', 'Fibrosis', 'Effusion', 'Pneumonia', 'Pleural_Thickening',
+                'Cardiomegaly', 'Nodule', 'Mass', 'Hernia', 'Lung Lesion', 'Fracture',
+                'Lung Opacity', 'Enlarged Cardiomediastinum'
+            ]
+
+            # Calibrated operating threshold scaling (op_norm)
+            outputs_new = np.zeros_like(sig) + 0.5
+            mask_leq = sig < op_threshs
+            mask_gt = ~mask_leq
+            outputs_new[mask_leq] = sig[mask_leq] / (op_threshs[mask_leq] * 2.0)
+            outputs_new[mask_gt] = 1.0 - ((1.0 - sig[mask_gt]) / ((1.0 - op_threshs[mask_gt]) * 2.0))
+            normed = np.clip(outputs_new, 0.0, 1.0)
+
+            self.pathology_findings = []
+            for fa, en, n_score, raw_s, th in zip(labels_fa, labels_en, normed, sig, op_threshs):
+                self.pathology_findings.append({
+                    "fa": fa,
+                    "en": en,
+                    "score": float(n_score),
+                    "raw_prob": float(raw_s),
+                    "threshold": float(th),
+                    "is_positive": bool(n_score >= 0.5)
+                })
+            self.pathology_findings.sort(key=lambda x: x["score"], reverse=True)
+
+            dt = (time.time() - t0) * 1000
+            pos_cnt = sum(1 for p in self.pathology_findings if p["is_positive"])
+            self.status_label.config(text=f"✓ غربالگری ۱۸ بیماری در {dt:.0f} میلی‌ثانیه تکمیل شد ({pos_cnt} مورد بالاتر از آستانه)", fg="#34d399")
+            self.refresh_sidebar_ui()
+
+        except Exception as e:
+            messagebox.showerror("خطای پردازش", f"خطا حین غربالگری بیماری‌ها:\n{traceback.format_exc()}")
+            self.status_label.config(text="خطا در ماژول بیماری‌ها", fg=C_RED)
+
+    # -------------------------------------------------------------------------
+    # Auxiliary Methods & Viewer Rendering
+    # -------------------------------------------------------------------------
     def open_about(self):
         ModernAboutDialog(self)
 
     def check_models(self):
-        has_bone = os.path.exists(BONE_WEIGHTS_PATH)
-        has_lung = os.path.exists(LUNG_WEIGHTS_PATH)
-
-        if not has_bone or not has_lung:
-            self.status_label.config(text="⚠ فایل مدل در پوشه weights یافت نشد", fg=C_AMBER)
+        b_ok = os.path.isfile(find_weight_file("bone_suppression.ts"))
+        f_ok = os.path.isfile(find_weight_file("fracture_yolov8.onnx"))
+        p_ok = os.path.isfile(find_weight_file("cxr_densenet18.ts"))
+        if b_ok and f_ok and p_ok:
+            self.status_label.config(text="✓ کلیه ماژول‌های هوش مصنوعی (حذف استخوان، شکستگی، ۱۸ بیماری) فعال هستند", fg="#34d399")
+        elif b_ok:
+            self.status_label.config(text="✓ ماژول حذف استخوان فعال است (مدل‌های کمکی در پوشه weights قرار گیرند)", fg=C_AMBER)
         else:
-            size_mb = (os.path.getsize(BONE_WEIGHTS_PATH) + os.path.getsize(LUNG_WEIGHTS_PATH)) / (1024 * 1024)
-            self.status_label.config(
-                text=f"● مدل‌ها آماده هستند ({size_mb:.1f} MB) | سخت‌افزار: {self.device.upper()}",
-                fg="#10b981"
-            )
+            self.status_label.config(text="⚠ فایل مدل در پوشه weights یافت نشد", fg=C_AMBER)
 
     def load_models_eagerly(self):
-        if self.bone_model is not None:
-            return True
-        if not torch:
-            messagebox.showerror("خطا", "کتابخانه PyTorch بارگذاری نشده است.")
+        if torch is None:
+            messagebox.showerror("خطا", "کتابخانه PyTorch نصب نیست.")
             return False
-        if not os.path.exists(BONE_WEIGHTS_PATH):
-            messagebox.showerror("فایل مدل یافت نشد", f"فایل مدل هوش مصنوعی در مسیر زیر یافت نشد:\n{BONE_WEIGHTS_PATH}")
+        b_path = find_weight_file("bone_suppression.ts")
+        l_path = find_weight_file("lung_component_suppression.ts")
+        if not os.path.isfile(b_path):
+            messagebox.showerror("فایل مدل یافت نشد", f"فایل مدل هوش مصنوعی در مسیر زیر یافت نشد:\n{b_path}")
             return False
-
         try:
-            self.status_label.config(text="⏳ در حال بارگذاری مدل هوش مصنوعی در حافظه...", fg=C_CYAN)
+            self.status_label.config(text="در حال بارگذاری مدل‌های هوش مصنوعی...", fg=C_CYAN)
             self.update_idletasks()
-            dev = torch.device(self.device)
-            self.bone_model = torch.jit.load(BONE_WEIGHTS_PATH, map_location=dev).eval()
-            if os.path.exists(LUNG_WEIGHTS_PATH):
-                self.lung_model = torch.jit.load(LUNG_WEIGHTS_PATH, map_location=dev).eval()
-            self.status_label.config(text=f"● مدل‌ها در حافظه بارگذاری شدند ({self.device.upper()})", fg="#10b981")
+            self.bone_model = torch.jit.load(b_path, map_location=self.device)
+            self.bone_model.eval()
+            self.lung_model = torch.jit.load(l_path, map_location=self.device)
+            self.lung_model.eval()
             return True
         except Exception as e:
-            messagebox.showerror("خطای بارگذاری مدل", str(e))
-            self.status_label.config(text=f"خطا در بارگذاری مدل: {e}", fg=C_RED_HOVER)
+            messagebox.showerror("خطا", f"بارگذاری مدل با شکست مواجه شد:\n{e}")
             return False
 
     def on_device_change(self, event=None):
-        self.device = self.dev_combo.get()
+        new_dev = self.dev_combo.get()
+        if new_dev == "cuda" and (not torch or not torch.cuda.is_available()):
+            messagebox.showwarning("کارت گرافیک یافت نشد", "سخت‌افزار CUDA روی این سیستم در دسترس نیست. سوییچ به پردازنده (CPU)...")
+            self.dev_combo.set("cpu")
+            return
+        self.device = new_dev
         self.bone_model = None
         self.lung_model = None
-        self.status_label.config(text=f"سخت‌افزار پردازش تغییر یافت: {self.device.upper()}", fg=C_CYAN)
+        self.pathology_model = None
+        self.status_label.config(text=f"سخت‌افزار به {self.device.upper()} تغییر یافت", fg=C_CYAN)
 
     def open_image(self):
-        filetypes = [
-            ("All Supported Formats", "*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.dcm;*.bmp"),
-            ("DICOM Medical Files (*.dcm)", "*.dcm"),
-            ("PNG / JPEG Images", "*.png;*.jpg;*.jpeg"),
-            ("All Files", "*.*")
-        ]
-        path = filedialog.askopenfilename(title="انتخاب تصویر رادیوگرافی قفسه سینه", filetypes=filetypes)
-        if not path:
+        f = filedialog.askopenfilename(
+            title="انتخاب عکس رادیوگرافی (CXR)",
+            filetypes=[
+                ("کلیه فایل‌های پشتیبانی‌شده", "*.dcm;*.dicom;*.png;*.jpg;*.jpeg;*.tif;*.tiff"),
+                ("فایل‌های پزشکی DICOM", "*.dcm;*.dicom"),
+                ("تصاویر استاندارد", "*.png;*.jpg;*.jpeg;*.tif;*.tiff"),
+                ("همه فایل‌ها", "*.*")
+            ]
+        )
+        if not f:
             return
-
-        self.current_image_path = path
         try:
-            arr = self.read_image(path)
+            arr, meta = self.read_image(f)
+            self.current_image_path = f
             self.original_np = arr
             self.soft_np = None
             self.bone_np = None
             self.lung_np = None
             self.nonlung_np = None
-            fn = os.path.basename(path)
-            self.status_label.config(text=f"✓ فایل بارگذاری شد: {fn} ({arr.shape[1]}x{arr.shape[0]})", fg=C_TEXT_LIGHT)
+            self.fracture_findings = []
+            self.pathology_findings = []
+
+            name = os.path.basename(f)
+            p_name = meta.get("patient_name", "")
+            title_txt = f"{p_name} | {name}" if p_name else name
+            self.status_label.config(text=f"✓ فایل بارگذاری شد: {title_txt} ({arr.shape[1]}x{arr.shape[0]})", fg="#34d399")
+            self.refresh_sidebar_ui()
             self.render_view()
         except Exception as e:
-            messagebox.showerror("خطا در باز کردن تصویر", str(e))
+            messagebox.showerror("خطا در باز کردن تصویر", f"خواندن تصویر با خطا مواجه شد:\n{e}")
 
     def read_image(self, path):
-        if path.lower().endswith(".dcm"):
-            if not pydicom:
-                raise RuntimeError("کتابخانه pydicom برای پردازش فایل‌های .dcm مورد نیاز است.")
+        meta = {}
+        if path.lower().endswith((".dcm", ".dicom")) and pydicom is not None:
             ds = pydicom.dcmread(path)
+            meta["patient_name"] = str(getattr(ds, "PatientName", ""))
+            meta["patient_id"] = str(getattr(ds, "PatientID", ""))
+            meta["study_date"] = str(getattr(ds, "StudyDate", ""))
             arr = ds.pixel_array.astype(np.float32)
             if getattr(ds, "PhotometricInterpretation", "") == "MONOCHROME1":
                 arr = arr.max() - arr
-            lo, hi = arr.min(), arr.max()
-            arr = (arr - lo) / (hi - lo + 1e-10)
-            return arr
+            arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
+            return arr, meta
 
-        if cv2:
-            arr = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-            if arr is not None:
-                if arr.ndim == 3:
-                    arr = cv2.cvtColor(arr[..., :3], cv2.COLOR_BGR2GRAY)
-                arr = arr.astype(np.float32)
-                lo, hi = arr.min(), arr.max()
-                arr = (arr - lo) / (hi - lo + 1e-10)
-                return arr
+        if cv2 is not None:
+            bgr = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            if bgr is None:
+                raise ValueError("cv2 قادر به خواندن این فایل نیست.")
+            arr = bgr.astype(np.float32) / 255.0
+        else:
+            p = Image.open(path).convert("L")
+            arr = np.array(p, dtype=np.float32) / 255.0
 
-        pil_img = Image.open(path).convert("L")
-        arr = np.array(pil_img, dtype=np.float32) / 255.0
-        return arr
+        if self.auto_invert_var.get() and self.looks_inverted(arr):
+            arr = 1.0 - arr
+        return arr, meta
 
     def looks_inverted(self, arr):
         h, w = arr.shape
-        y0, y1 = int(0.40 * h), int(0.62 * h)
-        central = arr[y0:y1, int(0.46 * w):int(0.54 * w)]
-        left = arr[y0:y1, int(0.20 * w):int(0.32 * w)]
-        right = arr[y0:y1, int(0.68 * w):int(0.80 * w)]
-        if min(central.size, left.size, right.size) == 0:
-            return False
-        rng = float(arr.max() - arr.min()) + 1e-10
-        ref = float((np.median(left) + np.median(right)) / 2.0)
-        return (ref - float(np.median(central))) / rng > 0.04
-
-    def run_inference(self):
-        if self.original_np is None:
-            messagebox.showinfo("اطلاعیه", "لطفاً ابتدا یک تصویر رادیوگرافی قفسه سینه را باز کنید.")
-            return
-
-        if not self.load_models_eagerly():
-            return
-
-        t0 = time.time()
-        self.status_label.config(text="⏳ در حال استنباط شبکه عصبی و تفکیک استخوان...", fg=C_CYAN)
-        self.update_idletasks()
-
-        arr = self.original_np.copy()
-        if self.auto_invert_var.get() and self.looks_inverted(arr):
-            arr = arr.max() - arr
-
-        if cv2:
-            x_np = cv2.resize(arr, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
-        else:
-            pil_temp = Image.fromarray((arr * 255).astype(np.uint8)).resize((SIZE, SIZE), Image.Resampling.BOX)
-            x_np = np.array(pil_temp, dtype=np.float32) / 255.0
-
-        lo, hi = float(x_np.min()), float(x_np.max())
-        x_np = (x_np - lo) / (hi - lo + 1e-10)
-
-        dev = torch.device(self.device)
-        x = torch.from_numpy(x_np.astype(np.float32))[None, None].to(dev)
-
-        with torch.no_grad():
-            bone_out = self.bone_model(x)
-            if isinstance(bone_out, (tuple, list)):
-                bone_out = bone_out[0]
-            bone = bone_out[0, 0].float().cpu().numpy()
-            soft = x_np - bone
-
-            if self.lung_model:
-                xs = torch.from_numpy(soft.astype(np.float32))[None, None].to(dev)
-                lung_out = self.lung_model(xs)
-                if isinstance(lung_out, (tuple, list)):
-                    lung_out = lung_out[0]
-                lung = lung_out[0, 0].float().cpu().numpy()
-                nonlung = soft - lung
-            else:
-                lung = np.zeros_like(soft)
-                nonlung = soft
-
-        h, w = arr.shape
-        if cv2:
-            self.soft_np = cv2.resize(soft, (w, h), interpolation=cv2.INTER_CUBIC)
-            self.bone_np = cv2.resize(bone, (w, h), interpolation=cv2.INTER_CUBIC)
-            self.lung_np = cv2.resize(lung, (w, h), interpolation=cv2.INTER_CUBIC)
-            self.nonlung_np = cv2.resize(nonlung, (w, h), interpolation=cv2.INTER_CUBIC)
-        else:
-            self.soft_np = np.array(Image.fromarray(soft).resize((w, h), Image.Resampling.BICUBIC))
-            self.bone_np = np.array(Image.fromarray(bone).resize((w, h), Image.Resampling.BICUBIC))
-            self.lung_np = np.array(Image.fromarray(lung).resize((w, h), Image.Resampling.BICUBIC))
-            self.nonlung_np = np.array(Image.fromarray(nonlung).resize((w, h), Image.Resampling.BICUBIC))
-
-        elapsed = time.time() - t0
-        self.status_label.config(text=f"✓ جداسازی با موفقیت در {elapsed:.2f} ثانیه انجام شد", fg="#10b981")
-        self.render_view()
+        margin = max(4, int(min(h, w) * 0.05))
+        border = np.concatenate([
+            arr[:margin, :].ravel(),
+            arr[-margin:, :].ravel(),
+            arr[:, :margin].ravel(),
+            arr[:, -margin:].ravel()
+        ])
+        center = arr[h // 4 : 3 * h // 4, w // 4 : 3 * w // 4].ravel()
+        return float(border.mean()) > float(center.mean())
 
     def to_display_image(self, arr):
-        y = arr.copy()
+        if arr is None:
+            return None
+        a = arr.copy()
         if self.stretch_var.get():
-            lo, hi = np.percentile(y, [0.5, 99.5])
-            if hi - lo > 1e-6:
-                y = (y - lo) / (hi - lo)
-        u8 = (np.clip(y, 0.0, 1.0) * 255.0).astype(np.uint8)
-        return Image.fromarray(u8)
+            p_lo, p_hi = np.percentile(a, (0.5, 99.5))
+            if p_hi > p_lo:
+                a = np.clip((a - p_lo) / (p_hi - p_lo), 0.0, 1.0)
+        else:
+            a = np.clip(a, 0.0, 1.0)
+
+        # Apply Invert Display
+        if self.invert_display_var.get():
+            a = 1.0 - a
+
+        u8 = (a * 255.0).astype(np.uint8)
+
+        # Apply Edge Boost (Unsharp Masking for bone detail)
+        if self.edge_boost_var.get() and cv2 is not None:
+            blur = cv2.GaussianBlur(u8, (0, 0), 2.5)
+            u8 = cv2.addWeighted(u8, 1.6, blur, -0.6, 0)
+
+        return Image.fromarray(u8).convert("RGB")
 
     def on_slider_drag(self, event):
         cw = self.canvas.winfo_width()
-        if cw > 0:
-            self.slider_pos.set(max(0.0, min(1.0, event.x / cw)))
+        if cw > 0 and self.view_mode.get() == "split":
+            self.slider_pos.set(max(0.05, min(0.95, event.x / cw)))
             self.render_view()
 
     def on_slider_click(self, event):
-        cw = self.canvas.winfo_width()
-        if cw > 0:
-            self.slider_pos.set(max(0.0, min(1.0, event.x / cw)))
-            self.render_view()
+        self.on_slider_drag(event)
 
     def on_resize(self, event=None):
         self.render_view()
@@ -941,9 +1339,9 @@ class BoneSuppressionApp(tk.Tk):
 
             self.canvas.create_rectangle(x1, y1, x2, y2, fill=C_CARD, outline=C_BORDER, width=1)
             self.canvas.create_text(cx, cy - 80, text="🫁", font=("Segoe UI", 36), fill=C_CYAN)
-            self.canvas.create_text(cx, cy - 30, text="سامانه هوشمند حذف استخوان در رادیوگرافی قفسه سینه",
+            self.canvas.create_text(cx, cy - 30, text="سامانه جامع هوش مصنوعی تصویربرداری قفسه سینه",
                                     font=("Segoe UI", 13, "bold"), fill=C_TEXT_LIGHT)
-            self.canvas.create_text(cx, cy, text="BoneSuppression AI - Chest Radiograph Studio",
+            self.canvas.create_text(cx, cy, text="BoneSuppression AI - Multi-AI Chest Radiograph Studio",
                                     font=("Segoe UI", 10), fill=C_TEXT_MUTED)
 
             self.canvas.create_text(cx, cy + 38, text="جهت شروع، روی دکمه «باز کردن تصویر / DICOM» در نوار بالا کلیک کنید",
@@ -989,6 +1387,19 @@ class BoneSuppressionApp(tk.Tk):
             self.canvas.create_rectangle(ox + nw - 200, oy + 10, ox + nw - 10, oy + 38, fill="#0b0f19", outline=C_BORDER)
             self.canvas.create_text(ox + nw - 192, oy + 17, text="حذف استخوان (Soft Tissue)", fill=C_CYAN, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
 
+            # Overlay Fracture Boxes if active
+            if self.active_ai_module.get() == "fracture" and self.show_fracture_boxes.get() and self.fracture_findings:
+                for f in self.fracture_findings:
+                    bx1, by1, bx2, by2 = f["box"]
+                    cx1 = ox + int(bx1 * scale)
+                    cy1 = oy + int(by1 * scale)
+                    cx2 = ox + int(bx2 * scale)
+                    cy2 = oy + int(by2 * scale)
+                    self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#ef4444", width=3)
+                    self.canvas.create_rectangle(cx1, max(oy, cy1 - 22), cx1 + 130, cy1, fill="#991b1b", outline="#ef4444")
+                    self.canvas.create_text(cx1 + 6, max(oy + 2, cy1 - 18), text=f"🦴 شکستگی {f['conf']:.0%}",
+                                            fill="#ffffff", anchor=tk.NW, font=("Segoe UI", 8, "bold"))
+
         elif mode == "dual":
             half_w = (cw - 30) // 2
             img_w, img_h = orig_img.size
@@ -999,135 +1410,164 @@ class BoneSuppressionApp(tk.Tk):
             r_orig = orig_img.resize((nw, nh), Image.Resampling.BILINEAR)
             r_soft = soft_img.resize((nw, nh), Image.Resampling.BILINEAR)
 
-            self.tk_orig = ImageTk.PhotoImage(r_orig)
-            self.tk_soft = ImageTk.PhotoImage(r_soft)
+            dual_comp = Image.new("RGB", (nw * 2 + 10, nh))
+            dual_comp.paste(r_orig, (0, 0))
+            dual_comp.paste(r_soft, (nw + 10, 0))
 
+            ox = (cw - (nw * 2 + 10)) // 2
+            self.tk_img = ImageTk.PhotoImage(dual_comp)
             self.canvas.delete("all")
-            self.canvas.create_image(10, oy, anchor=tk.NW, image=self.tk_orig)
-            self.canvas.create_image(20 + nw, oy, anchor=tk.NW, image=self.tk_soft)
-
-            self.canvas.create_rectangle(15, oy + 10, 205, oy + 36, fill="#0b0f19", outline=C_BORDER)
-            self.canvas.create_text(22, oy + 16, text="تصویر کامل (Full Radiograph)", fill="white", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
-
-            self.canvas.create_rectangle(25 + nw, oy + 10, 265 + nw, oy + 36, fill="#0b0f19", outline=C_BORDER)
-            self.canvas.create_text(32 + nw, oy + 16, text="بافت نرم - حذف استخوان (Soft Tissue)", fill=C_CYAN, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
+            self.canvas.create_image(ox, oy, anchor=tk.NW, image=self.tk_img)
 
         elif mode == "quad":
-            panel_w = (cw - 30) // 2
-            panel_h = (ch - 30) // 2
+            bone_img = self.to_display_image(self.bone_np) if self.bone_np is not None else orig_img
+            lung_img = self.to_display_image(self.lung_np) if self.lung_np is not None else orig_img
+
+            qw = (cw - 30) // 2
+            qh = (ch - 30) // 2
             img_w, img_h = orig_img.size
-            scale = min(panel_w / img_w, panel_h / img_h)
+            scale = min(qw / img_w, qh / img_h)
             nw, nh = int(img_w * scale), int(img_h * scale)
 
-            bone_img = self.to_display_image(self.bone_np) if self.bone_np is not None else Image.new("L", (img_w, img_h))
-            lung_img = self.to_display_image(self.lung_np) if self.lung_np is not None else Image.new("L", (img_w, img_h))
+            q_orig = orig_img.resize((nw, nh), Image.Resampling.BILINEAR)
+            q_soft = soft_img.resize((nw, nh), Image.Resampling.BILINEAR)
+            q_bone = bone_img.resize((nw, nh), Image.Resampling.BILINEAR)
+            q_lung = lung_img.resize((nw, nh), Image.Resampling.BILINEAR)
 
-            self.tk_p1 = ImageTk.PhotoImage(orig_img.resize((nw, nh), Image.Resampling.BILINEAR))
-            self.tk_p2 = ImageTk.PhotoImage(bone_img.resize((nw, nh), Image.Resampling.BILINEAR))
-            self.tk_p3 = ImageTk.PhotoImage(soft_img.resize((nw, nh), Image.Resampling.BILINEAR))
-            self.tk_p4 = ImageTk.PhotoImage(lung_img.resize((nw, nh), Image.Resampling.BILINEAR))
+            quad_comp = Image.new("RGB", (nw * 2 + 10, nh * 2 + 10))
+            quad_comp.paste(q_orig, (0, 0))
+            quad_comp.paste(q_soft, (nw + 10, 0))
+            quad_comp.paste(q_bone, (0, nh + 10))
+            quad_comp.paste(q_lung, (nw + 10, nh + 10))
 
+            ox = (cw - (nw * 2 + 10)) // 2
+            oy = (ch - (nh * 2 + 10)) // 2
+            self.tk_img = ImageTk.PhotoImage(quad_comp)
             self.canvas.delete("all")
-            self.canvas.create_image(10, 10, anchor=tk.NW, image=self.tk_p1)
-            self.canvas.create_image(20 + nw, 10, anchor=tk.NW, image=self.tk_p2)
-            self.canvas.create_image(10, 20 + nh, anchor=tk.NW, image=self.tk_p3)
-            self.canvas.create_image(20 + nw, 20 + nh, anchor=tk.NW, image=self.tk_p4)
-
-            self.canvas.create_text(20, 20, text="Full Radiograph (CXR)", fill="white", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
-            self.canvas.create_text(30 + nw, 20, text="Predicted Bone (استخوان)", fill=C_AMBER, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
-            self.canvas.create_text(20, 30 + nh, text="Bone-Suppressed (بافت نرم)", fill="#10b981", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
-            self.canvas.create_text(30 + nw, 30 + nh, text="Lung Component (میدان ریه)", fill=C_CYAN, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
+            self.canvas.create_image(ox, oy, anchor=tk.NW, image=self.tk_img)
 
     def save_results(self):
-        if self.soft_np is None:
-            messagebox.showinfo("اطلاعیه", "ابتدا جداسازی استخوان را اجرا کنید.")
+        if self.soft_np is None and not self.fracture_findings and not self.pathology_findings:
+            messagebox.showinfo("نتیجه‌ای موجود نیست", "لطفاً ابتدا یکی از پردازش‌های هوش مصنوعی را اجرا کنید.")
             return
 
-        dir_path = filedialog.askdirectory(title="پوشه ذخیره خروجی‌ها را انتخاب کنید")
-        if not dir_path:
-            return
-
-        stem = os.path.splitext(os.path.basename(self.current_image_path))[0] if self.current_image_path else "cxr"
-        self.to_display_image(self.soft_np).save(os.path.join(dir_path, f"{stem}_soft_tissue.png"))
-        self.to_display_image(self.bone_np).save(os.path.join(dir_path, f"{stem}_bone.png"))
-        if self.lung_np is not None:
-            self.to_display_image(self.lung_np).save(os.path.join(dir_path, f"{stem}_lung_component.png"))
-        messagebox.showinfo("موفقیت", f"تصاویر در مسیر زیر ذخیره شدند:\n{dir_path}")
-
-    def batch_process(self):
-        in_dir = filedialog.askdirectory(title="پوشه تصاویر ورودی (DICOM/PNG/JPG) را انتخاب کنید")
-        if not in_dir:
-            return
-        out_dir = filedialog.askdirectory(title="پوشه خروجی را انتخاب کنید")
+        out_dir = filedialog.askdirectory(title="پوشه ذخیره خروجی‌های رادیولوژی")
         if not out_dir:
             return
 
-        if not self.load_models_eagerly():
+        base = os.path.splitext(os.path.basename(self.current_image_path or "cxr"))[0]
+        saved = []
+
+        if self.soft_np is not None:
+            p_soft = os.path.join(out_dir, f"{base}_SoftTissue.png")
+            self.to_display_image(self.soft_np).save(p_soft)
+            saved.append(p_soft)
+
+        if self.bone_np is not None:
+            p_bone = os.path.join(out_dir, f"{base}_BoneComponent.png")
+            self.to_display_image(self.bone_np).save(p_bone)
+            saved.append(p_bone)
+
+        # Save AI Medical Report (TXT / JSON)
+        report_path = os.path.join(out_dir, f"{base}_AI_Radiology_Report.txt")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(f"======================================================================\n")
+            f.write(f"  گزارش بالینی هوش مصنوعی - {APP_TITLE}\n")
+            f.write(f"  {HOSPITAL_TITLE} - {NETWORK_TITLE}\n")
+            f.write(f"  توسعه: {DEVELOPER_NAME} | تاریخ: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"  فایل کلیشه: {os.path.basename(self.current_image_path or '')}\n")
+            f.write(f"======================================================================\n\n")
+
+            if self.fracture_findings:
+                f.write(f"[۱. غربالگری شکستگی استخوان (Fracture AI)]:\n")
+                f.write(f"تعداد موارد کشف‌شده: {len(self.fracture_findings)}\n")
+                for i, fr in enumerate(self.fracture_findings, 1):
+                    f.write(f" - مورد {i}: اطمینان {fr['conf']:.1%} در محدوده {fr['box']}\n")
+                f.write("\n")
+
+            if self.pathology_findings:
+                f.write(f"[۲. گزارش ۱۸ شاخص بالینی قفسه سینه (TorchXRayVision)]:\n")
+                for p in self.pathology_findings:
+                    flag = "[🔴 مثبت بالینی]" if p["is_positive"] else "[⚪ منفی/نرمال]"
+                    f.write(f"  {flag:18s} | {p['fa']:30s} ({p['en']:25s}): {p['score']*100:5.1f}%\n")
+                f.write("\n")
+
+        saved.append(report_path)
+        messagebox.showinfo("ذخیره موفق", f"{len(saved)} فایل با موفقیت ذخیره شدند:\n\n" + "\n".join(saved))
+
+    def batch_process(self):
+        in_dir = filedialog.askdirectory(title="انتخاب پوشه تصاویر جهت پردازش گروهی")
+        if not in_dir:
+            return
+        out_dir = filedialog.askdirectory(title="انتخاب پوشه ذخیره نتایج گروهی")
+        if not out_dir:
             return
 
-        files = [os.path.join(in_dir, f) for f in os.listdir(in_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.dcm', '.tif'))]
+        files = [os.path.join(in_dir, f) for f in os.listdir(in_dir)
+                 if f.lower().endswith((".png", ".jpg", ".jpeg", ".dcm", ".dicom", ".tif"))]
         if not files:
-            messagebox.showinfo("یافت نشد", "هیچ تصویر سازگاری در پوشه ورودی یافت نشد.")
+            messagebox.showinfo("فایلی یافت نشد", "هیچ تصویر پزشکی در پوشه انتخاب‌شده یافت نشد.")
             return
+
+        if self.bone_model is None or self.lung_model is None:
+            if not self.load_models_eagerly():
+                return
+
+        prog = tk.Toplevel(self)
+        prog.title("پردازش گروهی رادیولوژی...")
+        prog.geometry("440x160")
+        prog.configure(bg=C_CARD)
+        prog.transient(self)
+
+        lbl = tk.Label(prog, text="در حال پردازش تصاویر...", font=("Segoe UI", 9), fg=C_TEXT_LIGHT, bg=C_CARD)
+        lbl.pack(pady=14)
+        pb = ttk.Progressbar(prog, maximum=len(files), length=360)
+        pb.pack(pady=8)
 
         count = 0
-        for p in files:
+        for i, f in enumerate(files):
             try:
-                stem = os.path.splitext(os.path.basename(p))[0]
-                arr = self.read_image(p)
-                if self.auto_invert_var.get() and self.looks_inverted(arr):
-                    arr = arr.max() - arr
-                x_np = cv2.resize(arr, (SIZE, SIZE), interpolation=cv2.INTER_AREA) if cv2 else arr
-                lo, hi = float(x_np.min()), float(x_np.max())
-                x_np = (x_np - lo) / (hi - lo + 1e-10)
+                lbl.config(text=f"[{i+1}/{len(files)}] {os.path.basename(f)}")
+                pb["value"] = i + 1
+                prog.update()
 
-                dev = torch.device(self.device)
-                x = torch.from_numpy(x_np.astype(np.float32))[None, None].to(dev)
+                arr, _ = self.read_image(f)
+                resized = cv2.resize(arr, (SIZE, SIZE)) if cv2 else np.array(Image.fromarray(arr).resize((SIZE, SIZE)))
+                t_in = torch.from_numpy(resized).unsqueeze(0).unsqueeze(0).float().to(self.device)
                 with torch.no_grad():
-                    bone_out = self.bone_model(x)
-                    if isinstance(bone_out, (tuple, list)):
-                        bone_out = bone_out[0]
-                    bone = bone_out[0, 0].float().cpu().numpy()
-                    soft = x_np - bone
+                    bo = self.bone_model(t_in)
+                    bo_t = bo[0] if isinstance(bo, (list, tuple)) else bo
+                    so_t = t_in - bo_t
 
-                h, w = arr.shape
-                s_u8 = ((np.clip(soft, 0, 1)) * 255).astype(np.uint8)
-                b_u8 = ((np.clip(bone, 0, 1)) * 255).astype(np.uint8)
+                soft_a = so_t.squeeze().cpu().numpy()
+                full_soft = cv2.resize(soft_a, (arr.shape[1], arr.shape[0])) if cv2 else np.array(Image.fromarray(soft_a).resize((arr.shape[1], arr.shape[0])))
+                disp_soft = self.to_display_image(full_soft)
 
-                if cv2:
-                    s_u8 = cv2.resize(s_u8, (w, h))
-                    b_u8 = cv2.resize(b_u8, (w, h))
-                    cv2.imwrite(os.path.join(out_dir, f"{stem}_soft.png"), s_u8)
-                    cv2.imwrite(os.path.join(out_dir, f"{stem}_bone.png"), b_u8)
-                else:
-                    Image.fromarray(s_u8).resize((w, h)).save(os.path.join(out_dir, f"{stem}_soft.png"))
-                    Image.fromarray(b_u8).resize((w, h)).save(os.path.join(out_dir, f"{stem}_bone.png"))
+                base = os.path.splitext(os.path.basename(f))[0]
+                disp_soft.save(os.path.join(out_dir, f"{base}_SoftTissue.png"))
                 count += 1
-            except Exception as e:
-                print(f"Error processing {p}: {e}")
+            except Exception:
+                pass
 
-        messagebox.showinfo("پایان پردازش گروهی", f"تعداد {count} تصویر با موفقیت پردازش و ذخیره شد.")
+        prog.destroy()
+        messagebox.showinfo("پایان پردازش گروهی", f"پردازش {count} از {len(files)} تصویر با موفقیت به پایان رسید.")
 
 
+# -----------------------------------------------------------------------------
+# Unhandled Exception Safety Net
+# -----------------------------------------------------------------------------
 def handle_fatal_exception(exc_type, exc_val, exc_tb):
-    """Crash handler: logs to disk and presents standard dialog."""
-    err_text = "".join(traceback.format_exception(exc_type, exc_val, exc_tb))
-    log_file = os.path.join(EXE_DIR, "bone_suppression_error.log")
+    err_msg = "".join(traceback.format_exception(exc_type, exc_val, exc_tb))
     try:
-        with open(log_file, "w", encoding="utf-8") as f:
-            f.write(err_text)
+        log_file = os.path.join(EXE_DIR, "error_crash.log")
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n--- CRASH AT {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n{err_msg}\n")
     except Exception:
         pass
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror(
-            "خطای اجرای نرم‌افزار",
-            f"متأسفانه در اجرای برنامه خطایی رخ داده است:\n\n{str(exc_val)}\n\n"
-            f"گزارش خطا در فایل زیر ذخیره شد:\n{log_file}"
-        )
-    except Exception:
-        pass
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("خطای سیستمی", f"خطای پیش‌بینی‌نشده در برنامه:\n\n{err_msg[:600]}")
+    root.destroy()
 
 
 if __name__ == "__main__":
@@ -1135,5 +1575,5 @@ if __name__ == "__main__":
     try:
         app = BoneSuppressionApp()
         app.mainloop()
-    except Exception as exc:
-        handle_fatal_exception(type(exc), exc, exc.__traceback__)
+    except Exception as e:
+        handle_fatal_exception(*sys.exc_info())
