@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Quick Updater (v2.3.0)
+title BoneSuppression AI - Multi-AI Quick Updater (v2.4.0)
 color 0f
 
 echo ======================================================================
@@ -33,6 +33,8 @@ for %%P in (
     "C:\BoneSuppressionAI\_internal\weights"
     "D:\BoneSuppressionAI\_internal\weights"
     "E:\BoneSuppressionAI\_internal\weights"
+    "E:\BoneSuppression-Windows\BoneSuppressionAI-Windows-x64-OfflineV2.2\BoneSuppressionAI\_internal\weights"
+    "E:\BoneSuppression-Windows\BoneSuppressionAI-Windows-x64-OfflineV2.1.1\BoneSuppressionAI\_internal\weights"
 ) do (
     if exist "%%~fP\bone_suppression.ts" (
         set "FOUND=%%~fP"
@@ -59,6 +61,9 @@ echo.
 
 :check_new_models
 echo [✓] بررسی مدل‌های جدید شکستگی و ۱۸ بیماری ریه...
+if not exist "%TARGET_DIR%\fracture_ortho.onnx" (
+    if exist "%~dp0weights\fracture_ortho.onnx" copy /y "%~dp0weights\fracture_ortho.onnx" "%TARGET_DIR%\" >nul
+)
 if not exist "%TARGET_DIR%\fracture_yolov8.onnx" (
     if exist "%~dp0weights\fracture_yolov8.onnx" copy /y "%~dp0weights\fracture_yolov8.onnx" "%TARGET_DIR%\" >nul
 )
@@ -68,7 +73,7 @@ if not exist "%TARGET_DIR%\cxr_densenet18.ts" (
 
 :launch
 echo ======================================================================
-echo اجرای BoneSuppression AI (Multi-AI Workstation v2.3.0)...
+echo اجرای BoneSuppression AI (Multi-AI Workstation v2.4.0)...
 echo ======================================================================
 if exist "%~dp0BoneSuppressionAI.exe" (
     start "" "%~dp0BoneSuppressionAI.exe"

@@ -3,7 +3,7 @@
 ; Supports offline installations, Persian & English interface, and DICOM association.
 
 #define MyAppName "BoneSuppression AI"
-#define MyAppVersion "2.3.0"
+#define MyAppVersion "2.4.0"
 #define MyAppPublisher "Aram Mostafaei / Boali Hospital Marivan"
 #define MyAppURL "https://github.com/arammoostafaye/bone-suppression-chest-xray"
 #define MyAppExeName "BoneSuppressionAI.exe"

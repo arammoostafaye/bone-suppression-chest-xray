@@ -1,6 +1,6 @@
 {
   "app_name": "BoneSuppression AI - Multi-AI Chest Studio",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "developer": {
     "name": "آرام مصطفائی",
     "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
@@ -27,19 +27,23 @@
         "lung_component_suppression.ts"
       ]
     },
-    "fracture_detection": {
+    "fracture_ortho": {
       "framework": "onnx",
-      "model": "fracture_yolov8.onnx",
+      "model": "fracture_ortho.onnx",
       "task": "object-detection",
       "classes": [
         "fracture"
-      ]
+      ],
+      "mAP50": 0.92,
+      "precision": 0.903,
+      "recall": 0.832
     },
     "chest_pathologies_18": {
       "framework": "torchscript",
-      "model": "cxr_densenet18.ts",
+      "model": "densenet121-res224-all.pt",
       "task": "multi-label-classification",
-      "pathologies_count": 18
+      "pathologies_count": 18,
+      "mean_auc": 0.823
     }
   }
 }

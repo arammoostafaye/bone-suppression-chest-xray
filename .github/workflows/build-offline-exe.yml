@@ -39,6 +39,7 @@ jobs:
           curl -L --retry 3 -o offline_package/weights/bone_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/bone_suppression.ts
           curl -L --retry 3 -o offline_package/weights/lung_component_suppression.ts https://huggingface.co/qureaiorg/bone-suppression/resolve/main/weights/lung_component_suppression.ts
           curl -L --retry 3 -o offline_package/weights/fracture_yolov8.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_yolov8.onnx
+          curl -L --retry 3 -o offline_package/weights/fracture_ortho.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_ortho.onnx
           curl -L --retry 3 -o offline_package/weights/cxr_densenet18.ts https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/cxr_densenet18.ts
           Get-ChildItem offline_package/weights | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           if ((Get-Item offline_package/weights/bone_suppression.ts).Length -lt 400000000) { throw "bone weights incomplete" }
@@ -104,16 +105,16 @@ jobs:
               # Full offline package (with all weights, ~1000 MB)
               7z a -tzip -mx=4 ../../BoneSuppressionAI-Windows-x64-Offline.zip BoneSuppressionAI
               # Lightweight update package (EXCLUDING ONLY heavy 835 MB weights, KEEPING new fracture and pathology models => ~280 MB!)
-              7z a -tzip -mx=4 ../../BoneSuppressionAI-v2.3-Update-Only.zip BoneSuppressionAI -xr!bone_suppression.ts -xr!lung_component_suppression.ts
+              7z a -tzip -mx=4 ../../BoneSuppressionAI-v2.4-Update-Only.zip BoneSuppressionAI -xr!bone_suppression.ts -xr!lung_component_suppression.ts
           } else {
               Compress-Archive -Path BoneSuppressionAI -DestinationPath ../../BoneSuppressionAI-Windows-x64-Offline.zip -Force
           }
           cd ../..
           certutil -hashfile BoneSuppressionAI-offline.tar.gz SHA256
           certutil -hashfile BoneSuppressionAI-Windows-x64-Offline.zip SHA256
-          if (Test-Path "BoneSuppressionAI-v2.3-Update-Only.zip") {
-              certutil -hashfile BoneSuppressionAI-v2.3-Update-Only.zip SHA256
-              Get-Item BoneSuppressionAI-v2.3-Update-Only.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
+          if (Test-Path "BoneSuppressionAI-v2.4-Update-Only.zip") {
+              certutil -hashfile BoneSuppressionAI-v2.4-Update-Only.zip SHA256
+              Get-Item BoneSuppressionAI-v2.4-Update-Only.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           }
           Get-Item BoneSuppressionAI-offline.tar.gz | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           Get-Item BoneSuppressionAI-Windows-x64-Offline.zip | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
@@ -125,7 +126,7 @@ jobs:
           path: |
             BoneSuppressionAI-offline.tar.gz
             BoneSuppressionAI-Windows-x64-Offline.zip
-            BoneSuppressionAI-v2.3-Update-Only.zip
+            BoneSuppressionAI-v2.4-Update-Only.zip
 
       - name: Publish to Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -133,5 +134,5 @@ jobs:
         with:
           files: |
             BoneSuppressionAI-Windows-x64-Offline.zip
-            BoneSuppressionAI-v2.3-Update-Only.zip
+            BoneSuppressionAI-v2.4-Update-Only.zip
             BoneSuppressionAI-offline.tar.gz
