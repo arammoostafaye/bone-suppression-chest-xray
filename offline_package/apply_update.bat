@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Quick Updater (v2.4.0)
+title BoneSuppression AI - Multi-AI Quick Updater (v2.6.0)
 color 0f
 
 echo ======================================================================
@@ -73,7 +73,7 @@ if not exist "%TARGET_DIR%\cxr_densenet18.ts" (
 
 :launch
 echo ======================================================================
-echo اجرای BoneSuppression AI (Multi-AI Workstation v2.4.0)...
+echo اجرای BoneSuppression AI (پلتفرم تخصصی هوش مصنوعی رادیولوژی v2.6.0)...
 echo ======================================================================
 if exist "%~dp0BoneSuppressionAI.exe" (
     start "" "%~dp0BoneSuppressionAI.exe"

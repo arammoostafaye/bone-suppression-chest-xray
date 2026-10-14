@@ -2,10 +2,10 @@
 
 # 🩻 پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان
 ## BoneSuppression AI — Specialized AI Radiology & Mammography Platform
-### نگارش پایدار و رسمی: `v2.5.0`
+### نگارش پایدار و رسمی: `v2.6.0`
 
-[![Release](https://img.shields.io/badge/Release-v2.5.0-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.5.0)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20(Offline)-blue?style=for-the-badge&logo=windows)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.5.0)
+[![Release](https://img.shields.io/badge/Release-v2.6.0-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.0)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20(Offline)-blue?style=for-the-badge&logo=windows)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.0)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-PyTorch%20%7C%20ONNX-orange?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 [![Status](https://img.shields.io/badge/Status-Clinical%20Verified-success?style=for-the-badge)](https://github.com/arammoostafaye/bone-suppression-chest-xray)
 [![Reporting](https://img.shields.io/badge/Reporting-Auto%20CAD%20Docx-purple?style=for-the-badge)](https://github.com/arammoostafaye/bone-suppression-chest-xray)
@@ -38,9 +38,9 @@
                                   │
 [ورودی: رادیوگرافی ساده / DICOM] ──┼───► [موتور ۳] غربالگری ۱۸ بیماری ریه و شاخص CTR (TorchXRayVision)
                                   │
-                                  ├───► [موتور ۴] غربالگری ماموگرافی و رده‌بندی BI-RADS
+                                  ├───► [موتور ۴] غربالگری جامع ماموگرافی ۴ نمایه (Bilateral FFDM 4-View)
                                   │
-                                  └───► [سامانه CAD] صدور خودکار گزارش Word و فارسی (الگوی دکتر کُرانی)
+                                  └───► [سامانه CAD] صدور خودکار گزارش استاندارد بیمارستان بوعلی (Word & HIS)
 ```
 
 ---
@@ -71,27 +71,23 @@
 
 ---
 
-### ۴. موتور تخصصی غربالگری ماموگرافی (Mammography BI-RADS AI)
-* **بر پایه استانداردهای بین‌المللی ACR و دیتاست‌های معتبر ماموگرافی (VinDr-Mammo و CBIS-DDSM):**
-  - **تعیین خودکار دانسیته پستان (ACR Breast Density):** تفکیک دقیق در ۴ گرید:
-    - `Composition a`: بافت عمدتاً چربی (Almost fatty).
-    - `Composition b`: دانسیته فیبروگلاندولار پراکنده (Scattered glandular density).
-    - `Composition c`: دانسیته ناهمگن (Heterogeneously dense - احتمال پنهان‌سازی ضایعه).
-    - `Composition d`: بافت بسیار متراکم (Extreme increased density).
-  - **کشف توده‌ها و کانون‌های کلسیمی:** تعیین موضعی کوادران پستان (UOQ, UIQ, LOQ, LIQ)، تعیین عمق ضایعه و ارزیابی لبه‌ها (Circumscribed vs Partially indistinct).
-  - **رده‌بندی رسمی BI-RADS (از ۰ تا ۶):** ارزیابی احتمال بدخیمی و تعیین نیاز به سونوگرافی تکمیلی (US Exam) یا پیگیری ۶ ماهه.
+### ۴. استودیوی غربالگری جامع ماموگرافی ۴ نمایه (Bilateral 4-View Screening Studio)
+* **بر پایه استانداردهای بین‌المللی ACR و ارزیابی جامع ۲ طرفه پستان‌ها:**
+  - **پشتیبانی کامل از ۴ نمای استاندارد غربالگری:** مدیریت اسلات‌های اختصاصی `R-CC`، `L-CC`، `R-MLO` و `L-MLO` با قابلیت بارگذاری همزمان کل پوشه بیمار یا فایل‌های مجزا.
+  - **ماتریس نمایش ۴ نمایه همزمان (Quad Matrix PACS Viewer):** چیدمان متقارن ۲×۲ مشابه مانیتورهای تشخیصی بارکو جهت ارزیابی دیداری فوری تقارن پستان‌ها.
+  - **تعیین دانسیته دوطرفه پستان (ACR Breast Density Composition):** دسته‌بندی بافت از نظر میزان شفافیت و تراکم (A, B, C, D).
+  - **اعتبارسنجی سه‌بعدی توده (3D Cross-Validation):** تطبیق متقابل توده‌ها بین نماهای متعامد CC و MLO جهت تمایز توده واقعی از دانسیته‌های هم‌پوشان کاذب (Summation Artifact).
+  - **رده‌بندی رسمی BI-RADS (از ۰ تا ۶):** تخمین احتمال بدخیمی، تعیین نیاز به سونوگرافی متمرکز تکمیلی (US Exam) یا پیگیری دوره‌ای ۶ ماهه.
 
 ---
 
 ### ۵. سامانه صدور خودکار گزارش بالینی (Automated Clinical Reporting)
-* **مطابق با الگوی دقیق درمانی بیمارستان بوعلی و دکتر م. ع. کُرانی (متخصص رادیولوژی):**
-  - تولید فوری متن رسمی گزارش به زبان انگلیسی استاندارد ACR.
-  - تولید همزمان ترجمه بالینی فارسی جهت تفهیم به بیمار و ثبت در پرونده.
-  - استخراج خودکار مشخصات بیمار از فایل DICOM (نام، سن، تاریخ، شماره پرونده).
-  - **حل قطعی به‌هم‌ریختگی سربرگ در Word (.docx):** پیاده‌سازی جدول اختصاصی دو ستونه پایدار با تراز استاندارد، تا خروجی فایل Word در تمامی سیستم‌ها بدون جابجایی ستون‌ها باز شود.
+* **منطبق با ساختار رسمی دانشگاه علوم پزشکی کردستان و بیمارستان بوعلی مریوان:**
+  - تولید فوری متن رسمی گزارش به زبان انگلیسی استاندارد ACR و ترجمه فارسی بالینی راست‌چین‌شده (RTL) بدون به‌هم‌ریختگی کلمات یا علائم نگارشی.
+  - سربرگ رسمی وزارت بهداشت و درمان و دانشگاه علوم پزشکی کردستان در خروجی فایل Word (.docx) با جدول دو ستونه بدون تداخل ستونی.
+  - امضای رسمی پزشک متخصص رادیولوژیست (بدون اسامی پیش‌فرض هاردکدشده شخصی).
+  - پاکسازی کلیه اسامی نمونه تستی (مانند شیلان مهرشاد) و استخراج مستقیم مشخصات بیمار از متادیتاهای DICOM.
   - **دکمه ۱-کلیکه کپی در حافظه (Copy to Clipboard):** انتقال آنی به نرم‌افزار HIS یا تایپ ریپورت بیمارستان.
-
----
 
 ## 📊 جدول اعتبارسنجی بالینی و شاخص‌های دقت علمی (Validation Metrics)
 
@@ -122,14 +118,14 @@
 ### 🚀 روش اول: بروزرسانی سبک و سریع (مخصوص دارندگان نسخه قبلی)
 اگر قبلاً نسخه‌های پیشین را نصب داشته‌اید، نیازی به دانلود مجدد فایل‌های سنگین ۸۳۵ مگابایتی نیست. پکیج پچ تنها **~۲۸۰ مگابایت** حجم دارد:
 1. فایل سبک اسکریپت آپدیت را دانلود کنید:  
-   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.5.0)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.5.0/update_patch.bat)**
+   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.6.0)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.6.0/update_patch.bat)**
 2. آن را درون پوشه برنامه قبلی قرار داده و اجرا کنید.
 3. فایل‌های مدل قبلی شما به صورت خودکار به نسخه جدید متصل شده و برنامه فوراً اجرا می‌شود.
 
 ### 📦 روش دوم: پکیج کامل آفلاین (مخصوص سیستم‌های جدید)
 برای نصب تازه روی سیستم‌های بیمارستانی فاقد اینترنت:
 * فایل فشرده کامل را از صفحه رسمی ریلیز دریافت نمایید:  
-  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.5.0](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.5.0)**
+  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.6.0](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.0)**
   - فایل: `BoneSuppressionAI-Windows-x64-Offline.zip` (شامل تمامی مدل‌ها و وابستگی‌ها).
 
 #### مشخصات ورود به برنامه:
@@ -159,7 +155,7 @@
 - **Bone Suppression Models:** حق تألیف معماری پایه و وزن‌های حذف استخوان متعلق به تیم پژوهشی کمپانی **Qure.ai** (تحت لایسنس تحقیقاتی CC BY-NC-SA 4.0) می‌باشد.
 - **Chest Pathology Classifier:** متعلق به کنسرسیوم دانشگاهی **TorchXRayVision** (تحت لایسنس Apache-2.0).
 - **Fracture Detection Datasets:** بر پایه داده‌های آزاد پژوهشی **GRAZPEDWRI-DX** و **FracAtlas**.
-- **Mammography Standards:** بر پایه معیارهای انجمن رادیولوژی آمریکا (ACR BI-RADS) و الگوی گزارش‌نویسی تشخیصی **دکتر م. ع. کُرانی (بیمارستان بوعلی مریوان)**.
+- **Mammography Standards:** بر پایه معیارهای انجمن رادیولوژی آمریکا (ACR BI-RADS) و ساختار گزارش‌نویسی استاندارد **مرکز تصویربرداری پزشکی بیمارستان بوعلی مریوان**.
 
 ---
 

@@ -1,6 +1,6 @@
 {
-  "app_name": "BoneSuppression AI - Multi-AI Radiology Workstation",
-  "version": "2.5.0",
+  "app_name": "BoneSuppression AI - پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان",
+  "version": "2.6.0",
   "developer": {
     "name": "آرام مصطفائی",
     "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
@@ -48,6 +48,13 @@
     "mammography_birads": {
       "framework": "opencv_morphology_ai",
       "task": "density-mass-birads-screening",
+      "views": [
+        "R-CC",
+        "L-CC",
+        "R-MLO",
+        "L-MLO"
+      ],
+      "quad_matrix": true,
       "categories": [
         "ACR_Density",
         "Mass_Detection",
@@ -57,7 +64,7 @@
     },
     "clinical_reporting": {
       "framework": "structured_cad_engine",
-      "template": "Dr_MA_Korani_Hospital_Standard",
+      "template": "Boali_Hospital_Standard",
       "formats": [
         "docx",
         "txt",
