@@ -715,7 +715,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         c1_head = tk.Frame(card1, bg=C_CARD)
         c1_head.pack(fill=tk.X, padx=16, pady=(12, 6))
-        tk.Label(c1_head, text="🩻 اهداف و دستاوردهای ایستگاه کاری هوش مصنوعی رادیولوژی",
+        tk.Label(c1_head, text="🩻 اهداف و دستاوردهای پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان",
                  font=("Segoe UI", 11, "bold"), fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W)
 
         desc = (
@@ -861,7 +861,7 @@ class BoneSuppressionApp(tk.Tk):
     """BoneSuppression AI Desktop Workstation with integrated multi-AI suites and dockable sidebar."""
     def __init__(self):
         super().__init__()
-        self.title("BoneSuppression AI - Multi-AI Chest Studio | بیمارستان بوعلی مریوان")
+        self.title("BoneSuppression AI - پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان | آرام مصطفائی")
         self.geometry("1320x860")
         self.minsize(1100, 720)
         self.configure(bg=C_CANVAS)
