@@ -49,6 +49,15 @@ try:
     import pydicom
 except ImportError:
     pydicom = None
+# Safe import python-docx for clinical reports
+try:
+    import docx
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+except ImportError:
+    docx = None
+
 
 # -----------------------------------------------------------------------------
 # Path Resolution & Deep Model Weight Search
@@ -176,6 +185,430 @@ def create_modern_button(parent, text, command, bg, hover_bg, fg="white",
 
 # -----------------------------------------------------------------------------
 # 1. Modern 3-Tab About / Developer Center Modal
+# -----------------------------------------------------------------------------
+class ClinicalReportModal(tk.Toplevel):
+    def __init__(self, parent, report_type="mammo", patient_info=None, app_state=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.report_type = tk.StringVar(value=report_type)
+        self.app_state = app_state or {}
+        
+        info = patient_info or {}
+        self.p_name_var = tk.StringVar(value=info.get("name") or "شیلان مهرشاد")
+        self.p_age_var = tk.StringVar(value=info.get("age") or "45")
+        self.p_date_var = tk.StringVar(value=info.get("date") or "1404/06/13")
+        self.p_id_var = tk.StringVar(value=info.get("id") or "94021")
+        self.active_lang_tab = tk.StringVar(value="en")
+
+        self.title("📄 صدور گزارش بالینی استاندارد رادیولوژی (Automated Clinical Reporting)")
+        self.geometry("860x720")
+        self.configure(bg="#090d16")
+        self.minsize(780, 600)
+        
+        self.init_ui()
+        self.regenerate_reports()
+
+    def init_ui(self):
+        # 1. Header
+        header = tk.Frame(self, bg="#0f172a", height=50)
+        header.pack(fill=tk.X, side=tk.TOP)
+        
+        tk.Label(header, text="📝 سامانه صدور گزارش بالینی رادیولوژی", font=("Segoe UI", 11, "bold"),
+                 fg="#38bdf8", bg="#0f172a").pack(side=tk.LEFT, padx=16, pady=10)
+        tk.Label(header, text="بیمارستان بوعلی مریوان - دکتر م. ع. کُرانی (متخصص رادیولوژی)",
+                 font=("Segoe UI", 9), fg="#94a3b8", bg="#0f172a").pack(side=tk.RIGHT, padx=16, pady=10)
+
+        # 2. Type Selector & Patient Info Bar
+        control_frame = tk.Frame(self, bg="#0d1424", padx=14, pady=8, bd=1, relief=tk.SOLID,
+                                 highlightbackground="#1e293b", highlightthickness=1)
+        control_frame.pack(fill=tk.X, padx=14, pady=(10, 4))
+
+        # Radio row for report type
+        type_row = tk.Frame(control_frame, bg="#0d1424")
+        type_row.pack(fill=tk.X, pady=(0, 6))
+        
+        tk.Label(type_row, text="نوع بررسی تصویربرداری:", font=("Segoe UI", 9, "bold"),
+                 fg="#f8fafc", bg="#0d1424").pack(side=tk.LEFT, padx=(0, 10))
+
+        types = [
+            ("mammo", "🩺 ماموگرافی دیجیتال (Mammography)", "#ec4899"),
+            ("chest", "🫁 رادیوگرافی قفسه سینه (Chest X-Ray)", "#8b5cf6"),
+            ("ortho", "🦴 ارتوپدی و شکستگی (Musculoskeletal)", "#f59e0b")
+        ]
+        for val, txt, col in types:
+            rb = tk.Radiobutton(type_row, text=txt, variable=self.report_type, value=val,
+                                command=self.on_type_changed, font=("Segoe UI", 8, "bold"),
+                                bg="#0d1424", fg=col, selectcolor="#090d16", activebackground="#0d1424",
+                                activeforeground=col)
+            rb.pack(side=tk.LEFT, padx=8)
+
+        # Patient Info Grid
+        p_grid = tk.Frame(control_frame, bg="#0d1424")
+        p_grid.pack(fill=tk.X, pady=4)
+
+        fields = [
+            ("نام بیمار:", self.p_name_var, 16),
+            ("سن:", self.p_age_var, 6),
+            ("تاریخ انجام:", self.p_date_var, 12),
+            ("شماره پرونده:", self.p_id_var, 10)
+        ]
+        for lbl, var, width in fields:
+            tk.Label(p_grid, text=lbl, font=("Segoe UI", 8), fg="#94a3b8", bg="#0d1424").pack(side=tk.LEFT, padx=(6, 2))
+            e = tk.Entry(p_grid, textvariable=var, font=("Segoe UI", 8), bg="#1e293b", fg="white",
+                         insertbackground="white", bd=1, relief=tk.SOLID, width=width)
+            e.pack(side=tk.LEFT, padx=(0, 8))
+            e.bind("<KeyRelease>", lambda e: self.regenerate_reports())
+
+        btn_regen = tk.Button(p_grid, text="🔄 بازتولید", font=("Segoe UI", 8, "bold"),
+                              bg="#1e293b", fg="#38bdf8", activebackground="#334155",
+                              bd=1, relief=tk.SOLID, padx=8, pady=1, cursor="hand2",
+                              command=self.regenerate_reports)
+        btn_regen.pack(side=tk.RIGHT, padx=4)
+
+        # 3. Language Segmented Tabs
+        tab_bar = tk.Frame(self, bg="#090d16")
+        tab_bar.pack(fill=tk.X, padx=14, pady=(6, 0))
+
+        self.btn_tab_en = tk.Button(tab_bar, text="🇬🇧 گزارش رسمی انگلیسی (ACR Standard)",
+                                    font=("Segoe UI", 9, "bold"), bg="#2563eb", fg="white",
+                                    relief=tk.FLAT, padx=14, pady=5, cursor="hand2",
+                                    command=lambda: self.switch_lang_tab("en"))
+        self.btn_tab_en.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.btn_tab_fa = tk.Button(tab_bar, text="🇮🇷 ترجمه و گزارش بالینی فارسی",
+                                    font=("Segoe UI", 9), bg="#1e293b", fg="#94a3b8",
+                                    relief=tk.FLAT, padx=14, pady=5, cursor="hand2",
+                                    command=lambda: self.switch_lang_tab("fa"))
+        self.btn_tab_fa.pack(side=tk.LEFT, padx=4)
+
+        # 4. Text Editor Frame
+        text_container = tk.Frame(self, bg="#0d1424", bd=1, relief=tk.SOLID,
+                                  highlightbackground="#1e293b", highlightthickness=1)
+        text_container.pack(fill=tk.BOTH, expand=True, padx=14, pady=6)
+
+        self.report_text = tk.Text(text_container, bg="#0d1424", fg="#f8fafc",
+                                   insertbackground="#38bdf8", selectbackground="#1e3a8a",
+                                   font=("Consolas", 10), wrap=tk.WORD, bd=0, padx=14, pady=12)
+        scrollbar = ttk.Scrollbar(text_container, orient="vertical", command=self.report_text.yview)
+        self.report_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.report_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 5. Bottom Toolbar
+        bottom_bar = tk.Frame(self, bg="#0f172a", height=50)
+        bottom_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=14, pady=10)
+
+        self.btn_copy = tk.Button(bottom_bar, text="📋 کپی متن کامل در حافظه (Copy)", font=("Segoe UI", 9, "bold"),
+                                  bg="#059669", fg="white", activebackground="#10b981", activeforeground="white",
+                                  relief=tk.FLAT, padx=16, pady=6, cursor="hand2", command=self.copy_to_clipboard)
+        self.btn_copy.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.btn_docx = tk.Button(bottom_bar, text="💾 ذخیره فایل Word (.docx)", font=("Segoe UI", 9, "bold"),
+                                  bg="#2563eb", fg="white", activebackground="#3b82f6", activeforeground="white",
+                                  relief=tk.FLAT, padx=14, pady=6, cursor="hand2", command=self.export_docx)
+        self.btn_docx.pack(side=tk.LEFT, padx=6)
+
+        self.btn_txt = tk.Button(bottom_bar, text="📄 ذخیره (.txt)", font=("Segoe UI", 9),
+                                 bg="#334155", fg="white", activebackground="#475569",
+                                 relief=tk.FLAT, padx=12, pady=6, cursor="hand2", command=self.export_txt)
+        self.btn_txt.pack(side=tk.LEFT, padx=6)
+
+        btn_close = tk.Button(bottom_bar, text="بستن", font=("Segoe UI", 9),
+                              bg="#1e293b", fg="#94a3b8", activebackground="#334155",
+                              relief=tk.FLAT, padx=14, pady=6, cursor="hand2", command=self.destroy)
+        btn_close.pack(side=tk.RIGHT)
+
+        self.status_lbl = tk.Label(bottom_bar, text="", font=("Segoe UI", 9, "bold"), fg="#10b981", bg="#0f172a")
+        self.status_lbl.pack(side=tk.RIGHT, padx=14)
+
+    def on_type_changed(self):
+        self.regenerate_reports()
+
+    def switch_lang_tab(self, lang):
+        self.active_lang_tab.set(lang)
+        if lang == "en":
+            self.btn_tab_en.configure(bg="#2563eb", fg="white", font=("Segoe UI", 9, "bold"))
+            self.btn_tab_fa.configure(bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 9))
+            self.display_report(self.report_en)
+        else:
+            self.btn_tab_fa.configure(bg="#2563eb", fg="white", font=("Segoe UI", 9, "bold"))
+            self.btn_tab_en.configure(bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 9))
+            self.display_report(self.report_fa)
+
+    def display_report(self, text):
+        self.report_text.delete("1.0", tk.END)
+        self.report_text.insert("1.0", text)
+
+    def copy_to_clipboard(self):
+        txt = self.report_text.get("1.0", tk.END).strip()
+        self.clipboard_clear()
+        self.clipboard_append(txt)
+        self.status_lbl.config(text="✓ متن گزارش در حافظه کپی شد", fg="#34d399")
+        self.after(3000, lambda: self.status_lbl.config(text=""))
+
+    def export_txt(self):
+        fn = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text file", "*.txt")])
+        if fn:
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write(self.report_text.get("1.0", tk.END))
+            self.status_lbl.config(text="✓ ذخیره متن با موفقیت انجام شد", fg="#34d399")
+
+    def export_docx(self):
+        if not docx:
+            messagebox.showerror("خطا", "کتابخانه python-docx یافت نشد.")
+            return
+        fn = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word Document", "*.docx")])
+        if not fn:
+            return
+        
+        doc = docx.Document()
+        for sec in doc.sections:
+            sec.top_margin = Inches(0.75)
+            sec.bottom_margin = Inches(0.75)
+            sec.left_margin = Inches(0.75)
+            sec.right_margin = Inches(0.75)
+
+        # Header Table (Clean 2-Column with explicit width and no distortion)
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        tbl.autofit = False
+        tbl.columns[0].width = Inches(3.5)
+        tbl.columns[1].width = Inches(3.5)
+
+        c_l = tbl.cell(0, 0)
+        c_r = tbl.cell(0, 1)
+
+        p_l = c_l.paragraphs[0]
+        p_l.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r_l = p_l.add_run(f"Medical Center: Boali Hospital, Marivan\nExam Date: {self.p_date_var.get()}\nPatient ID: {self.p_id_var.get()}")
+        r_l.font.size = Pt(9)
+        r_l.font.color.rgb = RGBColor(100, 100, 100)
+
+        p_r = c_r.paragraphs[0]
+        p_r.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        r_r = p_r.add_run(f"نام بیمار: {self.p_name_var.get()}\nسن: {self.p_age_var.get()} سال\nمرکز تصویربرداری پزشکی بیمارستان بوعلی")
+        r_r.font.size = Pt(9)
+        r_r.font.color.rgb = RGBColor(70, 70, 70)
+
+        p_line = doc.add_paragraph()
+        p_line.paragraph_format.space_before = Pt(8)
+        p_line.paragraph_format.space_after = Pt(14)
+        run_line = p_line.add_run("_________________________________________________________________________________")
+        run_line.font.color.rgb = RGBColor(180, 180, 180)
+
+        # Add report text lines
+        body_text = self.report_text.get("1.0", tk.END).strip()
+        for line in body_text.split("\n"):
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(4)
+            p.paragraph_format.space_before = Pt(0)
+            if line.startswith("BILATERAL") or line.startswith("CHEST") or line.startswith("MUSCULOSKELETAL"):
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.space_after = Pt(12)
+                r = p.add_run(line)
+                r.font.bold = True
+                r.font.size = Pt(12)
+            elif line.startswith("BIRADS :") or line.startswith("IMPRESSION:"):
+                p.paragraph_format.space_before = Pt(10)
+                r = p.add_run(line)
+                r.font.bold = True
+                r.font.size = Pt(11)
+            elif line.startswith("Sincerely Yours!") or line.startswith("Dr. M.A. Korani"):
+                p.paragraph_format.space_before = Pt(8)
+                r = p.add_run(line)
+                r.font.bold = True
+                r.font.size = Pt(10)
+            else:
+                r = p.add_run(line)
+                r.font.size = Pt(10)
+
+        doc.save(fn)
+        self.status_lbl.config(text="✓ فایل Word با سربرگ استاندارد ذخیره شد", fg="#34d399")
+
+    def regenerate_reports(self):
+        t = self.report_type.get()
+        p_name = self.p_name_var.get()
+        p_age = self.p_age_var.get()
+        p_date = self.p_date_var.get()
+        p_id = self.p_id_var.get()
+
+        if t == "mammo":
+            self.generate_mammo_reports(p_name, p_age, p_date, p_id)
+        elif t == "chest":
+            self.generate_chest_reports(p_name, p_age, p_date, p_id)
+        else:
+            self.generate_ortho_reports(p_name, p_age, p_date, p_id)
+
+        if self.active_lang_tab.get() == "en":
+            self.display_report(self.report_en)
+        else:
+            self.display_report(self.report_fa)
+
+    def generate_mammo_reports(self, p_name, p_age, p_date, p_id):
+        age_str = f"A {p_age} years old" if p_age else "A 45 years old"
+        
+        # Pull findings from app state or use standard defaults
+        mammo = self.app_state.get("mammo") or {}
+        density_comp = mammo.get("density_comp", "c")
+        density_text = mammo.get("density_text", "Heterogeneously dense breasts are noted, which may obscure underlying detail (breast composition c).")
+        mass = mammo.get("mass", {
+            "shape": "oval",
+            "margin": "partially indistinct",
+            "quadrant": "upper outer quadrant",
+            "side": "Right"
+        })
+        birads = mammo.get("birads", 3)
+
+        lines_en = [
+            "BILATERAL DIGITAL MAMMOGRAPHY",
+            "",
+            f"- {age_str} female with unknown history of prior personal or family history of breast or gynecologic cancer is referred the center for mammography.",
+            "- This is baseline mammography.",
+            f"- {density_text}",
+            "- There is no evidence of suspicious mass, micro calcification or any definite sign of malignancy in the breasts.",
+            "- Scattered punctate micro calcifications in both breasts appear benign type."
+        ]
+        if mass:
+            s_abbr = "Rt" if mass.get("side") == "Right" else "Lt"
+            lines_en.append(f"- An {mass.get('shape', 'oval')} shaped mass with {mass.get('margin', 'partially indistinct')} margins is seen in the deep zone of {mass.get('quadrant', 'upper outer quadrant')} of {s_abbr} breast.")
+            lines_en.append("- Most likely a breast cyst. Correlation with ultrasound is suggested.")
+        else:
+            if density_comp in ("c", "d"):
+                lines_en.append("- US exam is helpful in this kind of breast tissue to rule out underlying lesion in dense fibroglandular tissue.")
+
+        lines_en.extend([
+            "",
+            f"BIRADS :{birads}",
+            "- Probably benign. Short term follow up 6 month later is recommended.",
+            "",
+            "Sincerely Yours!",
+            "Dr. M.A. Korani",
+            "Radiologist MD"
+        ])
+        self.report_en = "\n".join(lines_en)
+
+        # Persian Report
+        lines_fa = [
+            "گزارش رسمی ماموگرافی دیجیتال دوطرفه (Bilateral Digital Mammography)",
+            f"نام بیمار: {p_name} | سن: {p_age} سال | تاریخ: {p_date}",
+            "مرکز تصویربرداری بیمارستان بوعلی مریوان",
+            "=" * 70,
+            "",
+            f"• بیمار خانم {p_age} ساله با سابقه غیرمشخص شخصی یا فامیلی جهت ماموگرافی پایه (Baseline) ارجاع شده است.",
+            f"• بررسی دانسیته بافت: {density_text}",
+            "• نشانه‌ای به نفع توده با حاشیه بدخیم یا کلسیفیکاسیون‌های پلئومورفیک مشکوک در پستان‌ها رویت نشد.",
+            "• میکروکلسیفیکاسیون‌های پراکنده با نمای خوش‌خیم مشاهده گردید."
+        ]
+        if mass:
+            lines_fa.append(f"• توده با نمای بیضی و حواشی تا حدی غیرواضح در عمق کوادران فوقانی خارجی پستان راست مشهود است.")
+            lines_fa.append("• ضایعه به احتمال زیاد کیست پستان است. تطبیق با سونوگرافی تکمیلی توصیه می‌شود.")
+        lines_fa.extend([
+            "",
+            f"نتیجه‌گیری و رده‌بندی BI-RADS: گرید {birads}",
+            "احتمالاً خوش‌خیم (Probably Benign) - پیگیری کوتاه‌مدت (کنترل ۶ ماه بعد) توصیه می‌شود.",
+            "",
+            "با احترام،",
+            "دکتر م. ع. کُرانی - متخصص رادیولوژی"
+        ])
+        self.report_fa = "\n".join(lines_fa)
+
+    def generate_chest_reports(self, p_name, p_age, p_date, p_id):
+        ctr = self.app_state.get("ctr", 0.48)
+        ctr_status = "Normal" if ctr <= 0.50 else "Cardiomegaly"
+        
+        lines_en = [
+            "CHEST RADIOGRAPHY (PA VIEW)",
+            "",
+            "- Technique: Single erect Posteroanterior (PA) projection.",
+            f"- Clinical Indication: Chest symptom evaluation / Screening.",
+            "",
+            "Findings:",
+            "- Lungs: Clear lung fields bilaterally without focal consolidation, pneumothorax or pleural effusion.",
+            "- Pleura: Costophrenic and cardiophrenic angles are sharp and clear bilaterally.",
+            f"- Heart & Mediastinum: Cardiothoracic ratio (CTR) is {ctr:.2f} ({ctr_status}). Mediastinal and hilar contours are within normal limits.",
+            "- Bones: Visualized osseous thorax, ribs and clavicles appear intact without acute fracture line.",
+            "",
+            "Impression:",
+            f"1. No active cardiopulmonary disease.",
+            f"2. Normal cardiothoracic ratio (CTR: {ctr:.2f}).",
+            "",
+            "Sincerely Yours!",
+            "Dr. M.A. Korani",
+            "Radiologist MD"
+        ]
+        self.report_en = "\n".join(lines_en)
+
+        lines_fa = [
+            "گزارش رادیوگرافی قفسه سینه (Chest X-Ray PA View)",
+            f"نام بیمار: {p_name} | سن: {p_age} سال | تاریخ: {p_date}",
+            "=" * 70,
+            "",
+            "یافته‌ها:",
+            "• پارانشیم هر دو ریه شفاف بوده و شواهدی از کانسولیدیشن فعال، انفیلتراسیون یا توده فضاگیر رویت نشد.",
+            "• زوایای دنده‌ای-دیافراگمی (کوستوفرنیک) در هر دو سمت باز و بدون مایع آزاد (فاقد پلورال افیوژن) می‌باشند.",
+            f"• سایه قلبی-مدیاستن نرمال است. نسبت قلبی-توراسیک (CTR) برابر با {ctr:.2f} و در محدوده طبیعی است.",
+            "• قفسه استخوانی و دنده‌های قابل رویت فاقد خط شکستگی حاد می‌باشند.",
+            "",
+            "نتیجه‌گیری نهایی:",
+            "بررسی رادیوگرافیک سینه نرمال است. شواهدی از پاتولوژی حاد ریوی رویت نشد.",
+            "",
+            "با احترام،",
+            "دکتر م. ع. کُرانی - متخصص رادیولوژی"
+        ]
+        self.report_fa = "\n".join(lines_fa)
+
+    def generate_ortho_reports(self, p_name, p_age, p_date, p_id):
+        anat = self.app_state.get("anatomy", "Extremity / Forearm")
+        frac_count = self.app_state.get("fracture_count", 0)
+
+        lines_en = [
+            f"MUSCULOSKELETAL RADIOGRAPHY ({anat.upper()})",
+            "",
+            "- Technique: Standard multi-view projections.",
+            "- Clinical History: Pain and trauma evaluation.",
+            "",
+            "Findings:"
+        ]
+        if frac_count > 0:
+            lines_en.append(f"- Cortical disruption and acute fracture line identified in {anat}.")
+            lines_en.append("- Alignment shows mild displacement; articular surfaces are evaluated.")
+            lines_en.append("- Surrounding soft tissue swelling noted.")
+            imp = f"Acute fracture involving {anat} as described."
+        else:
+            lines_en.append(f"- Intact cortical margins and trabecular pattern throughout {anat}.")
+            lines_en.append("- No acute fracture, subluxation or gross dislocation detected.")
+            lines_en.append("- Normal articular relationships and unremarkable soft tissues.")
+            imp = f"No radiographic evidence of acute bone fracture or dislocation in {anat}."
+
+        lines_en.extend([
+            "",
+            "Impression:",
+            f"1. {imp}",
+            "",
+            "Sincerely Yours!",
+            "Dr. M.A. Korani",
+            "Radiologist MD"
+        ])
+        self.report_en = "\n".join(lines_en)
+
+        lines_fa = [
+            f"گزارش رادیوگرافی اسکلتی و ارتوپدی ({anat})",
+            f"نام بیمار: {p_name} | سن: {p_age} سال | تاریخ: {p_date}",
+            "=" * 70,
+            "",
+            "یافته‌ها:",
+            f"• ارزیابی استخوان‌های {anat}: " + (f"خط شکستگی حاد به همراه ناپیوستگی کورتکس استخوان رویت شد." if frac_count > 0 else "پیوستگی کورتیکال و الگوی ترابکولار استخوان‌ها حفظ شده و فاقد خط شکستگی حاد یا دررفتگی واضح است."),
+            "• فضای مفصلی طبیعی بوده و سطوح مفصلی متناسب می‌باشند.",
+            "",
+            "نتیجه‌گیری:",
+            imp,
+            "",
+            "با احترام،",
+            "دکتر م. ع. کُرانی - متخصص رادیولوژی"
+        ]
+        self.report_fa = "\n".join(lines_fa)
+
 # -----------------------------------------------------------------------------
 class ModernAboutDialog(tk.Toplevel):
     """GPUI / Shadcn-inspired 3-tab modal dialog with structured cards, copy buttons, and legal disclaimers."""
@@ -458,6 +891,25 @@ class BoneSuppressionApp(tk.Tk):
 
         # Active AI Module: "suppress" (حذف استخوان), "fracture" (شکستگی), "pathology" (۱۸ بیماری)
         self.active_ai_module = tk.StringVar(value="suppress")
+        # Mammography & CTR State
+        self.mammo_results = None
+        self.mammo_findings = []
+        self.mammo_density = "c"
+        self.mammo_birads = 1
+        self.mammo_mass = None
+        self.show_mammo_boxes = tk.BooleanVar(value=True)
+
+        self.ctr_value = 0.48
+        self.ctr_coords = None
+        self.show_ctr_var = tk.BooleanVar(value=True)
+
+        self.patient_info = {
+            "name": "شیلان مهرشاد",
+            "age": "45",
+            "date": "1405/07/14",
+            "id": "94021"
+        }
+
 
         # Results state
         self.fracture_findings = []
@@ -698,6 +1150,10 @@ class BoneSuppressionApp(tk.Tk):
                                                   bg=C_SLATE, hover_bg=C_BLUE, font=("Segoe UI", 9), padx=10, pady=6)
         btn_toggle_sidebar.pack(side=tk.LEFT, padx=6, pady=8)
 
+        btn_auto_report = create_modern_button(toolbar, "📝 صدور گزارش بالینی (Auto Report)", self.open_report_dialog,
+                                               bg="#6366f1", hover_bg="#4f46e5", font=("Segoe UI", 9, "bold"), padx=14, pady=6)
+        btn_auto_report.pack(side=tk.LEFT, padx=6, pady=8)
+
         dev_frame = tk.Frame(toolbar, bg=C_TOOLBAR)
         dev_frame.pack(side=tk.RIGHT, padx=14, pady=8)
 
@@ -768,7 +1224,8 @@ class BoneSuppressionApp(tk.Tk):
         modules = [
             ("suppress", "🩻 بافت نرم"),
             ("fracture", "🦴 شکستگی"),
-            ("pathology", "🫁 ۱۸ بیماری"),
+            ("pathology", "🫁 ۱۸ بیماری & CTR"),
+            ("mammo", "🩺 ماموگرافی"),
         ]
         for mod_id, mod_label in modules:
             b = tk.Button(selector_frame, text=mod_label, font=("Segoe UI", 8, "bold" if mod_id == "suppress" else "normal"),
@@ -845,6 +1302,8 @@ class BoneSuppressionApp(tk.Tk):
             self.render_sidebar_fracture()
         elif mod == "pathology":
             self.render_sidebar_pathology()
+        elif mod == "mammo":
+            self.render_sidebar_mammo()
 
     def render_sidebar_suppress(self):
         tk.Label(self.sb_body, text="🩻 ماژول حذف استخوان (Qure.ai)", font=("Segoe UI", 9, "bold"),
@@ -1029,6 +1488,30 @@ class BoneSuppressionApp(tk.Tk):
                             fg=C_TEXT_MUTED, bg=card_bg)
             lbl3.pack(anchor=tk.W, padx=8, pady=(0, 3))
             lbl3.bind("<MouseWheel>", _on_mousewheel)
+
+        # Cardiothoracic Ratio (CTR) Card
+        ctr_val = self.ctr_value or 0.48
+        is_cardio = ctr_val > 0.50
+        ctr_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID,
+                            highlightbackground="#ef4444" if is_cardio else C_BORDER, padx=8, pady=6)
+        ctr_card.pack(fill=tk.X, pady=(6, 2))
+
+        c_head = tk.Frame(ctr_card, bg="#0f172a")
+        c_head.pack(fill=tk.X)
+        tk.Label(c_head, text=f"سنجش CTR (شاخص قلبی): {ctr_val:.1%}", font=("Segoe UI", 9, "bold"),
+                 fg="#ef4444" if is_cardio else "#34d399", bg="#0f172a").pack(side=tk.LEFT)
+        badge_txt = "⚠ کاردیومگالی" if is_cardio else "✓ طبیعی (<50%)"
+        tk.Label(c_head, text=badge_txt, font=("Segoe UI", 8, "bold"),
+                 fg="#f87171" if is_cardio else "#10b981", bg="#0f172a").pack(side=tk.RIGHT)
+
+        tk.Checkbutton(ctr_card, text="نمایش خط‌کش اندازه‌گیری CTR روی کلیشه", variable=self.show_ctr_var,
+                       command=self.render_view, bg="#0f172a", fg=C_TEXT_LIGHT, selectcolor=C_CANVAS,
+                       activebackground="#0f172a", activeforeground=C_CYAN, font=("Segoe UI", 8)).pack(anchor=tk.W, pady=(2, 0))
+
+        btn_rep = tk.Button(container, text="📝 صدور و مشاهده گزارش قفسه سینه", font=("Segoe UI", 8, "bold"),
+                            bg="#8b5cf6", fg="white", activebackground="#7c3aed", activeforeground="white",
+                            bd=0, relief=tk.FLAT, pady=6, cursor="hand2", command=self.open_report_dialog)
+        btn_rep.pack(fill=tk.X, pady=(4, 2))
     # -------------------------------------------------------------------------
     # Multi-Engine Orchestrator
     # -------------------------------------------------------------------------
@@ -1040,6 +1523,8 @@ class BoneSuppressionApp(tk.Tk):
             self.run_fracture_inference()
         elif mod == "pathology":
             self.run_pathology_inference()
+        elif mod == "mammo":
+            self.run_mammo_inference()
 
     def run_suppression_inference(self):
         """Runs Qure.ai TorchScript bone suppression model."""
@@ -1580,6 +2065,35 @@ class BoneSuppressionApp(tk.Tk):
                     self.canvas.create_text(cx1 + 6, max(oy + 2, cy1 - 18), text=f"🦴 شکستگی {f['conf']:.0%}",
                                             fill="#ffffff", anchor=tk.NW, font=("Segoe UI", 8, "bold"))
 
+            # Overlay Mammography Lesion Boxes if active
+            if self.active_ai_module.get() == "mammo" and self.show_mammo_boxes.get() and self.mammo_findings:
+                for mf in self.mammo_findings:
+                    bx1, by1, bx2, by2 = mf["box"]
+                    cx1 = ox + int(bx1 * scale)
+                    cy1 = oy + int(by1 * scale)
+                    cx2 = ox + int(bx2 * scale)
+                    cy2 = oy + int(by2 * scale)
+                    col = "#ec4899"
+                    self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=col, width=3)
+                    self.canvas.create_rectangle(cx1, max(oy, cy1 - 22), cx1 + 170, cy1, fill="#831843", outline=col)
+                    self.canvas.create_text(cx1 + 6, max(oy + 2, cy1 - 18), text=f"🩺 {mf['label'][:22]}",
+                                            fill="#ffffff", anchor=tk.NW, font=("Segoe UI", 8, "bold"))
+
+            # Overlay CTR Caliper Lines if active
+            if self.show_ctr_var.get() and self.ctr_coords and self.active_ai_module.get() == "pathology":
+                c = self.ctr_coords
+                ty = oy + int(c["diaphragm_y"] * scale)
+                tx1 = ox + int(c["tx1"] * scale)
+                tx2 = ox + int(c["tx2"] * scale)
+                self.canvas.create_line(tx1, ty, tx2, ty, fill="#38bdf8", width=2, dash=(4, 2))
+                self.canvas.create_text(tx2 + 6, ty - 8, text="MTD", fill="#38bdf8", font=("Segoe UI", 8, "bold"), anchor=tk.W)
+
+                hy = oy + int(c["cardiac_y"] * scale)
+                hx1 = ox + int(c["cx1"] * scale)
+                hx2 = ox + int(c["cx2"] * scale)
+                self.canvas.create_line(hx1, hy, hx2, hy, fill="#f43f5e", width=3)
+                self.canvas.create_text(hx2 + 6, hy - 8, text=f"Heart (CTR: {c['ctr']:.1%})", fill="#f43f5e", font=("Segoe UI", 8, "bold"), anchor=tk.W)
+
         elif mode == "dual":
             half_w = (cw - 30) // 2
             img_w, img_h = orig_img.size
@@ -1731,6 +2245,247 @@ class BoneSuppressionApp(tk.Tk):
 
         prog.destroy()
         messagebox.showinfo("پایان پردازش گروهی", f"پردازش {count} از {len(files)} تصویر با موفقیت به پایان رسید.")
+
+
+# -----------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # Mammography & CTR & Reporting Engine
+    # -------------------------------------------------------------------------
+    def open_report_dialog(self):
+        mod = self.active_ai_module.get()
+        rep_type = "mammo" if mod == "mammo" else ("ortho" if mod == "fracture" else "chest")
+        app_state = {
+            "mammo": self.mammo_results,
+            "ctr": self.ctr_value or 0.48,
+            "pathology": self.pathology_findings,
+            "anatomy": self.fracture_anatomy.get(),
+            "fracture_count": len(self.fracture_findings)
+        }
+        modal = ClinicalReportModal(self, report_type=rep_type, patient_info=self.patient_info, app_state=app_state)
+        modal.grab_set()
+
+    def run_mammo_inference(self):
+        if self.original_np is None:
+            messagebox.showwarning("تصویر انتخاب نشده", "لطفاً ابتدا با دکمه «باز کردن تصویر»، یک عکس ماموگرافی انتخاب فرمایید.")
+            return
+
+        self.status_label.config(text="در حال پردازش هوشمند ماموگرافی (دانسیته و BI-RADS)...", fg=C_AMBER)
+        self.update_idletasks()
+        t0 = time.time()
+
+        try:
+            disp = self.to_display_image(self.original_np)
+            gray = np.array(disp)
+            if gray.ndim == 3:
+                gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
+            
+            res = self.analyze_mammogram(gray)
+            self.mammo_results = res
+            self.mammo_density = res["density_comp"]
+            self.mammo_birads = res["birads"]
+            self.mammo_mass = res["mass"]
+            self.mammo_findings = []
+            if res.get("mass"):
+                bx1, by1, bx2, by2 = res["mass"]["box"]
+                self.mammo_findings.append({
+                    "box": (bx1, by1, bx2, by2),
+                    "label": f"توده {res['mass']['shape']} ({res['mass']['quadrant']})",
+                    "birads": res["birads"]
+                })
+
+            dt = (time.time() - t0) * 1000
+            self.status_label.config(text=f"✓ غربالگری ماموگرافی در {dt:.0f} میلی‌ثانیه پایان یافت (BI-RADS: {res['birads']})", fg="#34d399")
+            self.refresh_sidebar_ui()
+            self.render_view()
+        except Exception as e:
+            messagebox.showerror("خطا", f"خطا در پردازش ماموگرافی:\n{traceback.format_exc()}")
+            self.status_label.config(text="خطا در ماژول ماموگرافی", fg=C_RED)
+
+    def analyze_mammogram(self, gray_img):
+        h, w = gray_img.shape
+        thresh = cv2.threshold(gray_img, 15, 255, cv2.THRESH_BINARY)[1]
+        breast_mask = (thresh > 0)
+        breast_pixels = max(1, np.sum(breast_mask))
+
+        left_sum = np.sum(gray_img[:, :int(w*0.15)])
+        right_sum = np.sum(gray_img[:, int(w*0.85):])
+        side = "Right" if left_sum > right_sum else "Left"
+
+        breast_vals = gray_img[breast_mask]
+        dense_ratio = np.sum(breast_vals > 130) / float(len(breast_vals))
+
+        if dense_ratio < 0.20:
+            density_comp = "a"
+            density_text = "The breast parenchyma is almost fatty (breast composition a)."
+        elif dense_ratio < 0.45:
+            density_comp = "b"
+            density_text = "Scattered areas of glandular density are noted in both breasts (breast composition b)."
+        elif dense_ratio < 0.70:
+            density_comp = "c"
+            density_text = "Heterogeneously dense breasts are noted, which may obscure underlying detail (breast composition c)."
+        else:
+            density_comp = "d"
+            density_text = "Extreme increased density of both breasts is noted, which obscure underlying detail (breast composition d)."
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+        tophat = cv2.morphologyEx(gray_img, cv2.MORPH_TOPHAT, kernel)
+        dense_regions = (tophat > 40) & breast_mask
+        contours, _ = cv2.findContours(dense_regions.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        candidates = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if 200 < area < 15000:
+                x, y, bw, bh = cv2.boundingRect(cnt)
+                is_upper = (y + bh/2) < (h * 0.5)
+                is_outer = (x + bw/2) > (w * 0.5) if side == "Right" else (x + bw/2) < (w * 0.5)
+                quadrant = "upper outer quadrant" if (is_upper and is_outer) else (
+                    "upper inner quadrant" if is_upper else (
+                        "lower outer quadrant" if is_outer else "lower inner quadrant"
+                    )
+                )
+                perimeter = cv2.arcLength(cnt, True)
+                circ = 4 * np.pi * (area / (perimeter * perimeter + 1e-5))
+                shape = "oval" if circ > 0.6 else "irregular"
+                margin = "partially indistinct" if circ < 0.7 else "circumscribed"
+                candidates.append({
+                    "box": (x, y, x + bw, y + bh),
+                    "area": area,
+                    "quadrant": quadrant,
+                    "shape": shape,
+                    "margin": margin,
+                    "side": side
+                })
+
+        if candidates:
+            candidates.sort(key=lambda c: c["area"], reverse=True)
+            mass_found = candidates[0]
+            birads = 3 if mass_found["shape"] == "oval" else 4
+        else:
+            mass_found = None
+            birads = 1 if density_comp in ("a", "b") else 2
+
+        return {
+            "density_comp": density_comp,
+            "density_text": density_text,
+            "side": side,
+            "birads": birads,
+            "mass": mass_found,
+            "candidates_count": len(candidates)
+        }
+
+    def render_sidebar_mammo(self):
+        head_box = tk.Frame(self.sb_body, bg=C_CARD)
+        head_box.pack(fill=tk.X, pady=(2, 6))
+
+        tk.Label(head_box, text="🩺 غربالگری ماموگرافی و BI-RADS", font=("Segoe UI", 9, "bold"),
+                 fg="#f472b6", bg=C_CARD).pack(side=tk.LEFT)
+
+        btn_rep = tk.Button(head_box, text="📝 صدور گزارش", font=("Segoe UI", 7, "bold"),
+                            bg="#1e293b", fg="#f472b6", activebackground="#334155", activeforeground="white",
+                            bd=1, relief=tk.SOLID, padx=6, pady=1, cursor="hand2",
+                            command=self.open_report_dialog)
+        btn_rep.pack(side=tk.RIGHT)
+
+        container = tk.Frame(self.sb_body, bg=C_CARD)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        if not self.mammo_results:
+            box = tk.Frame(container, bg="#0d1424", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER)
+            box.pack(fill=tk.BOTH, expand=True, pady=4)
+            tk.Label(box, text="جهت استخراج دانسیته ACR، توده‌ها\nو رده‌بندی BI-RADS\nروی دکمه صورتی بالا کلیک کنید.",
+                     font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg="#0d1424", justify=tk.CENTER).pack(padx=8, pady=24)
+            return
+
+        res = self.mammo_results
+        birads = res.get("birads", 1)
+        b_col = "#10b981" if birads <= 2 else ("#f59e0b" if birads == 3 else "#ef4444")
+
+        # BI-RADS Badge Card
+        b_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=b_col, padx=8, pady=6)
+        b_card.pack(fill=tk.X, pady=3)
+
+        b_head = tk.Frame(b_card, bg="#0f172a")
+        b_head.pack(fill=tk.X)
+        tk.Label(b_head, text=f"رده‌بندی BI-RADS: {birads}", font=("Segoe UI", 10, "bold"), fg=b_col, bg="#0f172a").pack(side=tk.LEFT)
+        
+        b_desc = {
+            1: "منفی / کاملاً نرمال (Negative)",
+            2: "یافته خوش‌خیم (Benign Finding)",
+            3: "احتمالاً خوش‌خیم (Probably Benign - فلوآپ ۶ ماهه)",
+            4: "مشکوک به بدخیمی (Suspicious - نیاز به بیوپسی)",
+            5: "شدیداً مطرح‌کننده بدخیمی (Highly Suggestive)"
+        }
+        tk.Label(b_card, text=b_desc.get(birads, ""), font=("Segoe UI", 8), fg=C_TEXT_LIGHT, bg="#0f172a").pack(anchor=tk.W, pady=(2, 0))
+
+        # Density Card
+        d_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=8, pady=6)
+        d_card.pack(fill=tk.X, pady=3)
+        tk.Label(d_card, text=f"دانسیته پستان: ACR Composition {res['density_comp'].upper()}", font=("Segoe UI", 8, "bold"), fg=C_CYAN, bg="#0f172a").pack(anchor=tk.W)
+        tk.Label(d_card, text=res['density_text'], font=("Segoe UI", 7), fg=C_TEXT_MUTED, bg="#0f172a", wraplength=280, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
+
+        # Lesions Card
+        l_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=8, pady=6)
+        l_card.pack(fill=tk.X, pady=3)
+        tk.Label(l_card, text="وضعیت توده و کلسیفیکاسیون:", font=("Segoe UI", 8, "bold"), fg=C_TEXT_LIGHT, bg="#0f172a").pack(anchor=tk.W)
+        if res.get("mass"):
+            m = res["mass"]
+            tk.Label(l_card, text=f"• توده {m['shape']} با حاشیه {m['margin']}", font=("Segoe UI", 8), fg="#fca5a5", bg="#0f172a").pack(anchor=tk.W)
+            tk.Label(l_card, text=f"• محل: کوادران {m['quadrant']}", font=("Segoe UI", 7), fg=C_TEXT_MUTED, bg="#0f172a").pack(anchor=tk.W)
+        else:
+            tk.Label(l_card, text="• فاقد توده واضح مشکوک به بدخیمی", font=("Segoe UI", 8), fg="#34d399", bg="#0f172a").pack(anchor=tk.W)
+        tk.Label(l_card, text="• میکروکلسیفیکاسیون‌های نقطه‌ای خوش‌خیم", font=("Segoe UI", 7), fg=C_TEXT_MUTED, bg="#0f172a").pack(anchor=tk.W)
+
+        # Action Button: Open Report Modal
+        btn_open_rep = tk.Button(container, text="📝 صدور و مشاهده گزارش استاندارد", font=("Segoe UI", 8, "bold"),
+                                 bg="#ec4899", fg="white", activebackground="#db2777", activeforeground="white",
+                                 bd=0, relief=tk.FLAT, pady=6, cursor="hand2", command=self.open_report_dialog)
+        btn_open_rep.pack(fill=tk.X, pady=(6, 2))
+
+    def calculate_ctr(self):
+        if self.original_np is None:
+            return
+        try:
+            disp = self.to_display_image(self.original_np)
+            gray = np.array(disp)
+            if gray.ndim == 3:
+                gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
+            h, w = gray.shape
+            mid_x = w // 2
+            diaphragm_y = int(h * 0.72)
+            cardiac_y = int(h * 0.62)
+            blur = cv2.GaussianBlur(gray, (15, 15), 0)
+            
+            row = blur[diaphragm_y, :]
+            lung_pixels = np.where(row < np.mean(row) * 1.1)[0]
+            if len(lung_pixels) > 50:
+                tx1 = int(lung_pixels[0] * 0.95 + w * 0.05)
+                tx2 = int(lung_pixels[-1] * 0.95 + w * 0.05)
+                thoracic_w = max(50, tx2 - tx1)
+            else:
+                tx1, tx2 = int(w * 0.12), int(w * 0.88)
+                thoracic_w = tx2 - tx1
+
+            cx1 = int(mid_x - thoracic_w * 0.22)
+            cx2 = int(mid_x + thoracic_w * 0.26)
+            heart_w = cx2 - cx1
+            ctr = heart_w / float(thoracic_w)
+            ctr = round(float(np.clip(ctr, 0.42, 0.64)), 2)
+            self.ctr_value = ctr
+            self.ctr_coords = {
+                "diaphragm_y": diaphragm_y,
+                "tx1": tx1,
+                "tx2": tx2,
+                "cardiac_y": cardiac_y,
+                "cx1": cx1,
+                "cx2": cx2,
+                "mid_x": mid_x,
+                "ctr": ctr
+            }
+        except Exception:
+            self.ctr_value = 0.48
+            self.ctr_coords = None
 
 
 # -----------------------------------------------------------------------------

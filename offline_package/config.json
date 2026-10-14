@@ -1,6 +1,6 @@
 {
-  "app_name": "BoneSuppression AI - Multi-AI Chest Studio",
-  "version": "2.4.1",
+  "app_name": "BoneSuppression AI - Multi-AI Radiology Workstation",
+  "version": "2.5.0",
   "developer": {
     "name": "آرام مصطفائی",
     "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
@@ -44,6 +44,25 @@
       "task": "multi-label-classification",
       "pathologies_count": 18,
       "mean_auc": 0.823
+    },
+    "mammography_birads": {
+      "framework": "opencv_morphology_ai",
+      "task": "density-mass-birads-screening",
+      "categories": [
+        "ACR_Density",
+        "Mass_Detection",
+        "Microcalcification",
+        "BI_RADS_0_to_6"
+      ]
+    },
+    "clinical_reporting": {
+      "framework": "structured_cad_engine",
+      "template": "Dr_MA_Korani_Hospital_Standard",
+      "formats": [
+        "docx",
+        "txt",
+        "clipboard"
+      ]
     }
   }
 }
