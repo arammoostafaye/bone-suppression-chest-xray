@@ -2,10 +2,10 @@
 
 # 🩻 پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان
 ## BoneSuppression AI — Specialized AI Radiology & Mammography Platform
-### نگارش پایدار و رسمی: `v2.6.2`
+### نگارش پایدار و رسمی: `v2.7.0`
 
-[![Release](https://img.shields.io/badge/Release-v2.6.2-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.2)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20(Offline)-blue?style=for-the-badge&logo=windows)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.2)
+[![Release](https://img.shields.io/badge/Release-v2.7.0-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.7.0)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20(Offline)-blue?style=for-the-badge&logo=windows)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.7.0)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-PyTorch%20%7C%20ONNX-orange?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 [![Status](https://img.shields.io/badge/Status-Clinical%20Verified-success?style=for-the-badge)](https://github.com/arammoostafaye/bone-suppression-chest-xray)
 [![Reporting](https://img.shields.io/badge/Reporting-Auto%20CAD%20Docx-purple?style=for-the-badge)](https://github.com/arammoostafaye/bone-suppression-chest-xray)
@@ -118,14 +118,14 @@
 ### 🚀 روش اول: بروزرسانی سبک و سریع (مخصوص دارندگان نسخه قبلی)
 اگر قبلاً نسخه‌های پیشین را نصب داشته‌اید، نیازی به دانلود مجدد فایل‌های سنگین ۸۳۵ مگابایتی نیست. پکیج پچ تنها **~۲۸۰ مگابایت** حجم دارد:
 1. فایل سبک اسکریپت آپدیت را دانلود کنید:  
-   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.6.2)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.6.2/update_patch.bat)**
+   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.7.0)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.7.0/update_patch.bat)**
 2. آن را درون پوشه برنامه قبلی قرار داده و اجرا کنید.
 3. فایل‌های مدل قبلی شما به صورت خودکار به نسخه جدید متصل شده و برنامه فوراً اجرا می‌شود.
 
 ### 📦 روش دوم: پکیج کامل آفلاین (مخصوص سیستم‌های جدید)
 برای نصب تازه روی سیستم‌های بیمارستانی فاقد اینترنت:
 * فایل فشرده کامل را از صفحه رسمی ریلیز دریافت نمایید:  
-  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.6.2](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.6.2)**
+  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.7.0](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.7.0)**
   - فایل: `BoneSuppressionAI-Windows-x64-Offline.zip` (شامل تمامی مدل‌ها و وابستگی‌ها).
 
 #### مشخصات ورود به برنامه:

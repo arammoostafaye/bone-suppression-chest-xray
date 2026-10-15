@@ -1,19 +1,19 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Patch Updater (v2.6.2)
+title BoneSuppression AI - Multi-AI Patch Updater (v2.7.0)
 color 0f
 
-set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.6.2/BoneSuppressionAI-v2.6.2-Update-Only.zip"
-set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.6.2-Update-Only.zip"
-set "OUT=%~dp0BoneSuppressionAI-v2.6.2-Update-Only.zip"
+set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.7.0/BoneSuppressionAI-v2.7.0-Update-Only.zip"
+set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.7.0-Update-Only.zip"
+set "OUT=%~dp0BoneSuppressionAI-v2.7.0-Update-Only.zip"
 
 echo ======================================================================
-echo   BoneSuppression AI - بروزرسانی ارتوپدی و بالینی (نگارش v2.6.2)
+echo   BoneSuppression AI - بروزرسانی اتصال مستقیم به پکس مدال (نگارش v2.7.0)
 echo   قابلیت‌های جدید:
-echo     1. تفکیک اندام‌ها: شکستگی ارتوپدی (دست، مچ، ساعد، پا) و قفسه سینه
-echo     2. تنظیم اسلایدر حساسیت و کشف ترک‌های مویی
-echo     3. رفع مشکل اسکرول لیست ۱۸ بیماری ریه
-echo     4. جدول درصدهای دقت و اعتبارسنجی علمی بالینی
+echo     1. دریافت مستقیم تصاویر دایکام از پکس مدال بیمارستان با لینک پیامک/وب
+echo     2. چینش و تحلیل هوشمند خودکار ۴ نمای استاندارد ماموگرافی
+echo     3. مدیریت و پاک‌سازی هوشمند کش موقت جهت آزادسازی فضای درایو C
+echo     4. موتور پیشرفته گزارش‌نویسی بالینی آکادمیک (Consultant-Grade)
 echo   توسعه‌دهنده: آرام مصطفائی - بیمارستان بوعلی مریوان
 echo ======================================================================
 echo.

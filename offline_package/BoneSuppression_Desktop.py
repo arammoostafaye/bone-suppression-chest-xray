@@ -31,6 +31,7 @@ import numpy as np
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
+from pacs_downloader import MedalPacsClient, PacsCacheManager
 
 # Safe import PyTorch
 try:
@@ -1003,7 +1004,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         tk.Label(title_frame, text="🫁 BoneSuppression AI - Multi-AI Chest Studio",
                  font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_HEADER).pack(anchor=tk.W)
-        tk.Label(title_frame, text=f"نگارش v2.6.2 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
+        tk.Label(title_frame, text=f"نگارش v2.7.0 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
                  font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER).pack(anchor=tk.W, pady=(2, 0))
 
         btn_close = create_modern_button(header, "✕ بستن", self.destroy,
@@ -1092,7 +1093,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         c2_head = tk.Frame(card2, bg=C_CARD)
         c2_head.pack(fill=tk.X, padx=16, pady=(12, 6))
-        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.6.2",
+        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.7.0",
                  font=("Segoe UI", 10, "bold"), fg=C_AMBER, bg=C_CARD).pack(anchor=tk.W)
 
         engines = [
@@ -1220,6 +1221,226 @@ class ModernAboutDialog(tk.Toplevel):
 # -----------------------------------------------------------------------------
 # 2. Main Desktop Application Window
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Medal PACS PRO 2024 Integration Modal (Boali Hospital Marivan)
+# -----------------------------------------------------------------------------
+class MedalPacsModal(tk.Toplevel):
+    """
+    Modern dialog for downloading DICOM studies directly from Boali Hospital
+    Medal PACS via SMS query token or direct serieslist/viewer links.
+    Includes smart cache manager to clean temp storage and protect C: disk space.
+    """
+    def __init__(self, parent_app):
+        super().__init__(parent_app)
+        self.app = parent_app
+        self.title("🌐 اتصال و دریافت مستقیم از پکس مدال بیمارستان بوعلی مریوان")
+        self.geometry("740x580")
+        self.minsize(680, 520)
+        self.configure(bg=C_BG)
+        self.transient(parent_app)
+        self.grab_set()
+
+        self.cache_mgr = PacsCacheManager(os.path.join(SCRIPT_DIR, "pacs_temp_cache"))
+        self.pacs_client = MedalPacsClient(self.cache_mgr)
+
+        self.target_modality = tk.StringVar(value="mammo")
+        self.is_downloading = False
+
+        self.init_ui()
+        self.update_cache_display()
+
+    def init_ui(self):
+        # Header Bar
+        header = tk.Frame(self, bg=C_HEADER, height=64)
+        header.pack(fill=tk.X, side=tk.TOP)
+        
+        t_box = tk.Frame(header, bg=C_HEADER)
+        t_box.pack(side=tk.LEFT, padx=18, pady=10)
+        tk.Label(t_box, text="🌐 سامانه دریافت مستقیم تصاویر از پکس بیمارستان بوعلی مریوان",
+                 font=("Segoe UI", 12, "bold"), fg=C_CYAN, bg=C_HEADER).pack(anchor=tk.W)
+        tk.Label(t_box, text="Medal PACS PRO 2024 Mobile Edition | پشتیبانی از لینک پیامک بیمار، لینک‌های وب و پاک‌سازی کش",
+                 font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_HEADER).pack(anchor=tk.W, pady=(2, 0))
+
+        btn_close = create_modern_button(header, "✕ بستن", self.destroy,
+                                         bg=C_SLATE, hover_bg=C_RED, font=("Segoe UI", 8), padx=10, pady=3)
+        btn_close.pack(side=tk.RIGHT, padx=14, pady=14)
+
+        tk.Frame(self, bg=C_BORDER, height=1).pack(fill=tk.X)
+
+        body = tk.Frame(self, bg=C_BG, padx=20, pady=14)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        # 1. Input Box Card
+        in_card = tk.Frame(body, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=14, pady=12)
+        in_card.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(in_card, text="🔗 لینک پیامک یا آدرس پکس مدال را در کادر زیر وارد کنید:",
+                 font=("Segoe UI", 10, "bold"), fg=C_TEXT_LIGHT, bg=C_CARD).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(in_card, text="(پشتیبانی کامل از لینک ?query=... پیامک، لینک مستقیم serieslist.aspx?SK=... یا کپی کل متن پیامک)",
+                 font=("Segoe UI", 8), fg=C_TEXT_MUTED, bg=C_CARD).pack(anchor=tk.W, pady=(0, 8))
+
+        row_entry = tk.Frame(in_card, bg=C_CARD)
+        row_entry.pack(fill=tk.X)
+
+        self.txt_url = tk.Text(row_entry, height=3, bg="#0b1120", fg=C_TEXT_LIGHT, insertbackground=C_CYAN,
+                               font=("Consolas", 9), bd=1, relief=tk.SOLID, highlightbackground=C_BORDER,
+                               highlightthickness=1, padx=8, pady=6)
+        self.txt_url.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        btn_paste = create_modern_button(row_entry, "📋 چسباندن (Paste)", self.on_paste_link,
+                                         bg="#1e293b", hover_bg=C_BLUE, font=("Segoe UI", 9, "bold"), padx=12, pady=8)
+        btn_paste.pack(side=tk.RIGHT, padx=(8, 0), fill=tk.Y)
+
+        # 2. Modality Selection Card
+        mod_card = tk.Frame(body, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=14, pady=10)
+        mod_card.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(mod_card, text="🎯 مقصد تصاویر پس از دانلود:", font=("Segoe UI", 9, "bold"),
+                 fg=C_CYAN, bg=C_CARD).pack(anchor=tk.W, pady=(0, 6))
+
+        row_mods = tk.Frame(mod_card, bg=C_CARD)
+        row_mods.pack(fill=tk.X)
+
+        rb1 = tk.Radiobutton(row_mods, text="🩺 ماموگرافی دیجیتال ۴ نمایه (Bilateral 4-View FFDM) ➔ چینش و تحلیل هوشمند",
+                             variable=self.target_modality, value="mammo",
+                             bg=C_CARD, fg=C_TEXT_LIGHT, selectcolor="#0b1120",
+                             activebackground=C_CARD, activeforeground=C_CYAN, font=("Segoe UI", 9))
+        rb1.pack(anchor=tk.W, pady=2)
+
+        rb2 = tk.Radiobutton(row_mods, text="🫁 رادیوگرافی قفسه سینه / ارتوپدی (Chest X-Ray / Plain Film) ➔ نمایشگر اصلی",
+                             variable=self.target_modality, value="chest_ortho",
+                             bg=C_CARD, fg=C_TEXT_LIGHT, selectcolor="#0b1120",
+                             activebackground=C_CARD, activeforeground=C_CYAN, font=("Segoe UI", 9))
+        rb2.pack(anchor=tk.W, pady=2)
+
+        # 3. Actions & Cache Cleaning Bar
+        action_bar = tk.Frame(body, bg=C_BG)
+        action_bar.pack(fill=tk.X, pady=(0, 12))
+
+        self.btn_download = create_modern_button(action_bar, "🚀 دریافت و بارگذاری خودکار از پکس", self.start_download_thread,
+                                                bg=C_GREEN, hover_bg=C_GREEN_HOVER, font=("Segoe UI", 10, "bold"), padx=18, pady=8)
+        self.btn_download.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.btn_cache = create_modern_button(action_bar, "🧹 پاک‌سازی کش موقت", self.on_clear_cache,
+                                              bg=C_SLATE, hover_bg="#dc2626", font=("Segoe UI", 8, "bold"), padx=12, pady=8)
+        self.btn_cache.pack(side=tk.RIGHT)
+
+        # 4. Progress & Status Card
+        prog_card = tk.Frame(body, bg=C_CARD, bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=14, pady=10)
+        prog_card.pack(fill=tk.BOTH, expand=True)
+
+        self.lbl_status = tk.Label(prog_card, text="آماده دریافت لینک یا پیامک بیمار...",
+                                   font=("Segoe UI", 9, "bold"), fg=C_CYAN, bg=C_CARD)
+        self.lbl_status.pack(anchor=tk.W, pady=(0, 4))
+
+        self.progress_bar = ttk.Progressbar(prog_card, orient=tk.HORIZONTAL, mode='determinate', length=100)
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+
+        self.txt_log = tk.Text(prog_card, height=6, bg="#070d19", fg="#94a3b8", font=("Consolas", 8),
+                               bd=0, relief=tk.FLAT, state=tk.DISABLED, padx=6, pady=4)
+        self.txt_log.pack(fill=tk.BOTH, expand=True)
+
+    def log(self, text):
+        self.txt_log.config(state=tk.NORMAL)
+        self.txt_log.insert(tk.END, f"• {text}\n")
+        self.txt_log.see(tk.END)
+        self.txt_log.config(state=tk.DISABLED)
+
+    def update_cache_display(self):
+        sz = self.cache_mgr.get_cache_size_formatted()
+        self.btn_cache.config(text=f"🧹 پاک‌سازی کش ({sz})")
+
+    def on_paste_link(self):
+        try:
+            cb = self.clipboard_get()
+            if cb:
+                self.txt_url.delete("1.0", tk.END)
+                self.txt_url.insert("1.0", cb.strip())
+                self.log("لینک از کلیپ‌بورد درج شد.")
+        except Exception:
+            pass
+
+    def on_clear_cache(self):
+        sz_before = self.cache_mgr.get_cache_size_formatted()
+        freed, count = self.cache_mgr.clear_cache()
+        self.update_cache_display()
+        self.log(f"کش موقت پاک‌سازی شد: {count} فایل حذف و فضا آزاد گردید ({sz_before}).")
+        messagebox.showinfo("پاک‌سازی حافظه موقت",
+                            f"فضای اشغال‌شده توسط تصاویر دانلودی پکس با موفقیت آزاد شد.\nحجم آزاد شده: {sz_before}",
+                            parent=self)
+
+    def start_download_thread(self):
+        if self.is_downloading:
+            return
+        raw_text = self.txt_url.get("1.0", tk.END).strip()
+        if not raw_text:
+            messagebox.showwarning("ورودی نامعتبر", "لطفاً ابتدا لینک پیامک یا آدرس پکس را در کادر وارد فرمایید.", parent=self)
+            return
+
+        self.is_downloading = True
+        self.btn_download.config(state=tk.DISABLED, bg=C_SLATE)
+        self.progress_bar['value'] = 0
+        self.log("آغاز فرآیند ارتباط با سرور پکس مدال...")
+
+        import threading
+        t = threading.Thread(target=self._download_worker, args=(raw_text,), daemon=True)
+        t.start()
+
+    def _update_progress(self, pct, msg):
+        self.after(0, lambda: self._apply_progress(pct, msg))
+
+    def _apply_progress(self, pct, msg):
+        self.progress_bar['value'] = pct
+        self.lbl_status.config(text=msg)
+        self.log(msg)
+
+    def _download_worker(self, raw_input):
+        try:
+            res = self.pacs_client.download_study(raw_input, mode=0, progress_callback=self._update_progress)
+            self.after(0, lambda: self._on_download_success(res))
+        except Exception as e:
+            err_msg = str(e)
+            self.after(0, lambda: self._on_download_error(err_msg))
+
+    def _on_download_success(self, res):
+        self.is_downloading = False
+        self.btn_download.config(state=tk.NORMAL, bg=C_GREEN)
+        self.update_cache_display()
+        
+        pname = res.get("pname", "")
+        pid = res.get("pid", "")
+        dicom_files = res.get("dicom_files", [])
+
+        self.log(f"✓ دریافت موفقیت‌آمیز {len(dicom_files)} فایل دایکام برای {pname} (شناسه: {pid})")
+
+        mod = self.target_modality.get()
+        if mod == "mammo":
+            self.app.load_dicom_files_to_mammo(dicom_files, pname=pname, pid=pid)
+            messagebox.showinfo("اتمام دریافت پکس",
+                                f"کلیشه‌های ماموگرافی بیمار با موفقیت از پکس دریافت و در استودیو بارگذاری شدند:\n\n"
+                                f"نام بیمار: {pname}\nشناسه / پرونده: {pid}\nتعداد فایل‌ها: {len(dicom_files)}",
+                                parent=self)
+            self.destroy()
+        else:
+            if dicom_files:
+                self.app.load_single_dicom(dicom_files[0], pname=pname, pid=pid)
+                messagebox.showinfo("اتمام دریافت پکس",
+                                    f"کلیشه دایکام با موفقیت از پکس دریافت و در نمایشگر اصلی بارگذاری شد:\n\n"
+                                    f"نام بیمار: {pname}\nشناسه: {pid}",
+                                    parent=self)
+                self.destroy()
+
+    def _on_download_error(self, err):
+        self.is_downloading = False
+        self.btn_download.config(state=tk.NORMAL, bg=C_GREEN)
+        self.lbl_status.config(text="خطا در ارتباط با سرور پکس")
+        self.log(f"خطا: {err}")
+        messagebox.showerror("خطا در پکس مدال",
+                             f"ارتباط با سرور پکس بیمارستان با خطا مواجه شد:\n\n{err}\n\n"
+                             f"لطفاً اطمینان حاصل فرمایید که به شبکه بیمارستان یا اینترنت متصل هستید و لینک معتبر است.",
+                             parent=self)
+
 class BoneSuppressionApp(tk.Tk):
     """BoneSuppression AI Desktop Workstation with integrated multi-AI suites and dockable sidebar."""
     def __init__(self):
@@ -1513,6 +1734,10 @@ class BoneSuppressionApp(tk.Tk):
         btn_open = create_modern_button(toolbar, "📂 باز کردن تصویر / DICOM", self.open_image,
                                         bg=C_BLUE, hover_bg=C_BLUE_HOVER, font=("Segoe UI", 9, "bold"), padx=14, pady=6)
         btn_open.pack(side=tk.LEFT, padx=(14, 6), pady=8)
+
+        btn_pacs = create_modern_button(toolbar, "🌐 دریافت از پکس مدال", self.open_pacs_modal,
+                                        bg="#0284c7", hover_bg="#0369a1", font=("Segoe UI", 9, "bold"), padx=12, pady=6)
+        btn_pacs.pack(side=tk.LEFT, padx=6, pady=8)
 
         self.btn_run_active = create_modern_button(toolbar, "⚡ اجرای جداسازی استخوان", self.run_active_engine,
                                                    bg=C_GREEN, hover_bg=C_GREEN_HOVER, font=("Segoe UI", 9, "bold"), padx=16, pady=6)
@@ -2677,6 +2902,97 @@ class BoneSuppressionApp(tk.Tk):
     # -------------------------------------------------------------------------
     # Mammography & CTR & Reporting Engine (4-View Screening Architecture)
     # -------------------------------------------------------------------------
+
+    def open_pacs_modal(self):
+        MedalPacsModal(self)
+
+    def load_dicom_files_to_mammo(self, files, pname="", pid=""):
+        if not files:
+            return
+        if pname and not self.patient_info.get("name"):
+            self.patient_info["name"] = pname.replace("^", " ").replace("_", " ")
+        if pid and not self.patient_info.get("id"):
+            self.patient_info["id"] = pid
+
+        loaded_count = 0
+        for f in files:
+            try:
+                arr, meta = self.read_image(f)
+                self.update_patient_meta(meta)
+
+                slot = None
+                vp = meta.get("view_position", "")
+                lat = meta.get("image_laterality", "")
+
+                if lat in ("R", "RIGHT") and "CC" in vp:
+                    slot = "R-CC"
+                elif lat in ("L", "LEFT") and "CC" in vp:
+                    slot = "L-CC"
+                elif lat in ("R", "RIGHT") and "MLO" in vp:
+                    slot = "R-MLO"
+                elif lat in ("L", "LEFT") and "MLO" in vp:
+                    slot = "L-MLO"
+
+                if not slot:
+                    fn = os.path.basename(f).lower()
+                    if ("r-cc" in fn or "r_cc" in fn or "rcc" in fn) or ("right" in fn and "cc" in fn):
+                        slot = "R-CC"
+                    elif ("l-cc" in fn or "l_cc" in fn or "lcc" in fn) or ("left" in fn and "cc" in fn):
+                        slot = "L-CC"
+                    elif ("r-mlo" in fn or "r_mlo" in fn or "rmlo" in fn) or ("right" in fn and "mlo" in fn):
+                        slot = "R-MLO"
+                    elif ("l-mlo" in fn or "l_mlo" in fn or "lmlo" in fn) or ("left" in fn and "mlo" in fn):
+                        slot = "L-MLO"
+
+                if not slot:
+                    for s in ["R-CC", "L-CC", "R-MLO", "L-MLO"]:
+                        if self.mammo_views[s] is None:
+                            slot = s
+                            break
+
+                if not slot:
+                    slot = self.active_mammo_slot.get()
+
+                self.mammo_views[slot] = {
+                    "arr": arr,
+                    "path": f,
+                    "meta": meta,
+                    "analysis": None
+                }
+                if self.original_np is None:
+                    self.original_np = arr
+                    self.current_image_path = f
+                loaded_count += 1
+            except Exception as e:
+                print(f"Error loading {f}: {e}")
+
+        self.select_ai_module("mammo")
+        self.mammo_quad_mode.set(True)
+        self.refresh_sidebar_ui()
+        self.render_view()
+        self.status_label.config(text=f"✓ دریافت {loaded_count} تصویر ماموگرافی از پکس برای {self.patient_info.get('name', '')}")
+
+    def load_single_dicom(self, path, pname="", pid=""):
+        try:
+            arr, meta = self.read_image(path)
+            self.original_np = arr
+            self.current_image_path = path
+            self.processed_soft = None
+            self.processed_bone = None
+            self.processed_lung = None
+            self.yolo_boxes = None
+            self.dense_predictions = None
+            self.update_patient_meta(meta)
+            if pname and not self.patient_info.get("name"):
+                self.patient_info["name"] = pname.replace("^", " ").replace("_", " ")
+            if pid and not self.patient_info.get("id"):
+                self.patient_info["id"] = pid
+            self.refresh_sidebar_ui()
+            self.render_view()
+            self.status_label.config(text=f"✓ کلیشه پکس بارگذاری شد: {self.patient_info.get('name', '')}")
+        except Exception as e:
+            messagebox.showerror("خطا در بارگذاری دایکام", str(e))
+
     def open_report_dialog(self):
         mod = self.active_ai_module.get()
         if mod == "mammo" and not self.mammo_results:
@@ -3138,6 +3454,12 @@ class BoneSuppressionApp(tk.Tk):
                               bd=0, relief=tk.FLAT, pady=4, cursor="hand2",
                               command=self.load_mammo_multi)
         btn_batch.pack(fill=tk.X, pady=1)
+
+        btn_pacs_mammo = tk.Button(btn_bar, text="🌐 دریافت مستقیم از پکس مدال", font=("Segoe UI", 8, "bold"),
+                                   bg="#0284c7", fg="white", activebackground="#0369a1", activeforeground="white",
+                                   bd=0, relief=tk.FLAT, pady=4, cursor="hand2",
+                                   command=self.open_pacs_modal)
+        btn_pacs_mammo.pack(fill=tk.X, pady=1)
 
         row_toggle = tk.Frame(btn_bar, bg=C_CARD)
         row_toggle.pack(fill=tk.X, pady=2)

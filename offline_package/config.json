@@ -1,6 +1,6 @@
 {
   "app_name": "BoneSuppression AI - پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان",
-  "version": "2.6.2",
+  "version": "2.7.0",
   "developer": {
     "name": "آرام مصطفائی",
     "role": "پرسنل واحد امور تصویربرداری بیمارستان بوعلی",
@@ -19,6 +19,18 @@
     "password_hash": "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6cca20"
   },
   "engines": {
+    "medal_pacs_integration": {
+      "framework": "automated_http_session_pacs_client",
+      "target_system": "Medal PACS PRO 2024 - Mobile Station",
+      "hospital": "Boali Hospital Marivan",
+      "base_url": "https://marivan-pacs-boali.muk.ac.ir",
+      "features": [
+        "sms_token_auto_login",
+        "direct_series_downloader",
+        "full_resolution_16bit_dicom",
+        "smart_temp_cache_manager"
+      ]
+    },
     "bone_suppression": {
       "framework": "torchscript",
       "task": "image-to-image",
