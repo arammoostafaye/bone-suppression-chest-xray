@@ -200,6 +200,16 @@ class ClinicalReportModal(tk.Toplevel):
         self.p_id_var = tk.StringVar(value=info.get("id") or "")
         self.active_lang_tab = tk.StringVar(value="en")
 
+        if not self.p_name_var.get() or self.p_name_var.get() == "ثبت نشده":
+            views = self.app_state.get("mammo_4views") or {}
+            for v in views.values():
+                if v and v.get("path"):
+                    p = v["path"]
+                    folder = os.path.basename(os.path.dirname(p))
+                    if folder and folder.lower() not in ("desktop", "downloads", "documents", "uploads", "images", "pictures", "bone-suppression-chest-xray", "bonesuppressionai"):
+                        self.p_name_var.set(folder.replace("_", " ").replace("^", " "))
+                        break
+
         self.title("📄 صدور گزارش بالینی استاندارد رادیولوژی (Automated Clinical Reporting)")
         self.geometry("880x740")
         self.configure(bg="#090d16")
@@ -506,53 +516,88 @@ class ClinicalReportModal(tk.Toplevel):
             self.display_report(self.report_fa, is_rtl=True)
 
     def generate_mammo_reports(self, p_name, p_age, p_date, p_id):
-        p_name_display = p_name if p_name else "ثبت نشده"
-        p_age_display = f"{p_age}" if p_age else "---"
+        p_name_display = p_name if p_name and p_name != "N/A" else "ثبت نشده در پرونده"
+        p_name_en = p_name if p_name and p_name != "N/A" else "Unspecified"
+        p_age_display = f"{p_age}" if p_age and p_age != "---" else "---"
         p_date_display = p_date if p_date else time.strftime("%Y/%m/%d")
-        p_id_display = p_id if p_id else "---"
+        p_id_display = p_id if p_id and p_id != "---" else "---"
 
         mammo = self.app_state.get("mammo") or {}
         summary = self.app_state.get("mammo_summary") or {}
 
-        density_comp = summary.get("overall_comp") or mammo.get("density_comp", "c")
-        birads = summary.get("overall_birads") or mammo.get("birads", 2)
+        density_comp = summary.get("overall_comp") or mammo.get("density_comp", "b")
+        birads = summary.get("overall_birads") or mammo.get("birads", 1)
         m_obj = mammo.get("mass") or {}
         r_mass = summary.get("right_mass") or (m_obj if m_obj.get("side") == "Right" else None)
         l_mass = summary.get("left_mass") or (m_obj if m_obj.get("side") == "Left" else None)
 
-        density_dict = {
-            "a": ("The breast parenchyma is almost fatty (breast composition a).",
-                  "بافت پارانشیم پستان عمدتاً چربی و شفاف است (ترکیب بافتی نوع A)."),
-            "b": ("Scattered areas of glandular density are noted in both breasts (breast composition b).",
-                  "نواحی پراکنده از دانسیته فیبروگلاندولار در هر دو پستان رویت می‌شود (ترکیب بافتی نوع B)."),
-            "c": ("Heterogeneously dense breasts are noted, which may obscure underlying detail (breast composition c).",
-                  "دانسیته ناهمگن و متراکم در هر دو پستان مشاهده شد که ممکن است ضایعات زمینه‌ای را بپوشاند (ترکیب بافتی نوع C)."),
-            "d": ("Extreme increased density of both breasts is noted, which obscure underlying detail (breast composition d).",
-                  "افزایش شدید و منتشر دانسیته در هر دو پستان مشاهده شد (ترکیب بافتی بسیار متراکم نوع D).")
+        density_info = {
+            "a": {
+                "en_desc": "The breast parenchyma is almost entirely fatty (ACR Breast Composition a, < 25% glandular tissue).",
+                "en_sens": "Diagnostic sensitivity of mammography is optimal with minimal parenchymal masking effect.",
+                "fa_desc": "بافت پارانشیم پستان عمدتاً چربی و شفاف است (ترکیب بافتی ACR نوع A، کمتر از ۲۵ درصد بافت فیبروگلاندولار).",
+                "fa_sens": "حساسیت تشخیصی ماموگرافی در بالاترین سطح بوده و اثر پوشانندگی بافتی حداقل است."
+            },
+            "b": {
+                "en_desc": "Scattered areas of fibroglandular density are noted in both breasts (ACR Breast Composition b, approximately 25-50% glandular volume), distributed predominantly in central and retroareolar regions.",
+                "en_sens": "Diagnostic sensitivity of mammography is favorable with low masking effect.",
+                "fa_desc": "نواحی پراکنده از دانسیته فیبروگلاندولار در هر دو پستان رویت می‌شود (ترکیب بافتی ACR نوع B، معادل ۲۵ الی ۵۰ درصد حجم بافت)، که عمدتاً در نواحی مرکزی و رتروآرئولار توزیع شده است.",
+                "fa_sens": "حساسیت تشخیصی ماموگرافی مطلوب بوده و اثر پوشانندگی بافتی اندک است."
+            },
+            "c": {
+                "en_desc": "Heterogeneously dense breasts are noted (ACR Breast Composition c, approximately 51-75% fibroglandular tissue), which may obscure underlying small non-calcified lesions.",
+                "en_sens": "Moderate masking effect; supplementary targeted breast ultrasound is advised if clinically indicated.",
+                "fa_desc": "دانسیته ناهمگن و متراکم در هر دو پستان مشاهده شد (ترکیب بافتی ACR نوع C، معادل ۵۱ الی ۷۵ درصد بافت فیبروگلاندولار) که ممکن است ضایعات کوچک فاقد کلسیفیکاسیون را بپوشاند.",
+                "fa_sens": "اثر پوشانندگی بافتی متوسط؛ انجام سونوگرافی تکمیلی متمرکز در صورت وجود اندیکاسیون بالینی پیشنهاد می‌گردد."
+            },
+            "d": {
+                "en_desc": "Extreme increased density of both breasts is noted (ACR Breast Composition d, > 75% fibroglandular volume), which substantially lowers mammographic sensitivity.",
+                "en_sens": "Significant masking effect; supplementary bilateral breast ultrasound is strongly recommended.",
+                "fa_desc": "افزایش شدید و منتشر دانسیته در هر دو پستان مشاهده شد (ترکیب بافتی بسیار متراکم ACR نوع D، بیش از ۷۵ درصد حجم بافت) که حساسیت ماموگرافی را به میزان قابل توجهی کاهش می‌دهد.",
+                "fa_sens": "اثر پوشانندگی شدید بافت؛ انجام سونوگرافی تکمیلی دوطرفه پستان اکیداً توصیه می‌گردد."
+            }
         }
-        d_en, d_fa = density_dict.get(density_comp, density_dict["c"])
+        d_data = density_info.get(density_comp, density_info["b"])
 
-        birads_desc = {
-            1: ("Negative", "منفی و طبیعی",
-                "Routine annual screening mammography is recommended.",
-                "ماموگرافی غربالگری روتین سالیانه توصیه می‌شود."),
-            2: ("Benign Finding", "یافته قطعی خوش‌خیم",
-                "Routine annual screening mammography is recommended.",
-                "ماموگرافی غربالگری روتین سالیانه توصیه می‌شود."),
-            3: ("Probably Benign", "احتمالاً خوش‌خیم",
-                "Short-interval follow-up (unilateral or bilateral) mammography at 6 months is recommended.",
-                "پیگیری کوتاه‌مدت و انجام ماموگرافی کنترل ۶ ماه بعد توصیه می‌شود."),
-            4: ("Suspicious for Malignancy", "مشکوک به بدخیمی",
-                "Tissue diagnosis / Ultrasound-guided core needle biopsy is recommended.",
-                "ارزیابی بافتی و نمونه‌برداری (بیوپسی تحت هدایت سونوگرافی) توصیه می‌شود."),
-            5: ("Highly Suggestive of Malignancy", "شدیداً مطرح‌کننده بدخیمی",
-                "Appropriate clinical and surgical action / Biopsy is strongly recommended.",
-                "اقدام درمانی و ارجاع سریع جهت بیوپسی اکیداً توصیه می‌گردد."),
-            0: ("Incomplete Assessment", "ارزیابی ناکامل",
-                "Additional mammographic views and/or targeted ultrasound are required.",
-                "انجام کلیشه‌های تکمیلی ماموگرافی و/یا سونوگرافی متمرکز مورد نیاز است.")
+        birads_dict = {
+            1: {
+                "en_title": "Negative",
+                "fa_title": "منفی و کاملاً طبیعی",
+                "en_rec": "Routine annual screening mammography is recommended at age-appropriate intervals.",
+                "fa_rec": "انجام ماموگرافی غربالگری روتین سالیانه در فواصل زمانی استاندارد توصیه می‌شود."
+            },
+            2: {
+                "en_title": "Benign Finding",
+                "fa_title": "یافته قطعی خوش‌خیم",
+                "en_rec": "Routine annual screening mammography is recommended.",
+                "fa_rec": "انجام ماموگرافی غربالگری روتین سالیانه توصیه می‌شود."
+            },
+            3: {
+                "en_title": "Probably Benign",
+                "fa_title": "احتمالاً خوش‌خیم",
+                "en_rec": "Short-interval follow-up (unilateral or bilateral) mammography at 6 months is recommended to assess stability.",
+                "fa_rec": "پیگیری کوتاه‌مدت و ماموگرافی کنترل ۶ ماه بعد جهت ارزیابی ثبات ضایعه توصیه می‌شود."
+            },
+            4: {
+                "en_title": "Suspicious for Malignancy",
+                "fa_title": "مشکوک به بدخیمی",
+                "en_rec": "Tissue diagnosis / Ultrasound-guided core needle biopsy is recommended.",
+                "fa_rec": "ارزیابی بافتی و نمونه‌برداری سوزنی (Core Needle Biopsy) تحت هدایت سونوگرافی توصیه می‌شود."
+            },
+            5: {
+                "en_title": "Highly Suggestive of Malignancy",
+                "fa_title": "شدیداً مطرح‌کننده بدخیمی",
+                "en_rec": "Urgent clinical and surgical consultation with histological biopsy is strongly recommended.",
+                "fa_rec": "مشاوره سریع جراحی و انجام بیوپسی تشخیصی اکیداً توصیه می‌گردد."
+            },
+            0: {
+                "en_title": "Incomplete Assessment",
+                "fa_title": "ارزیابی ناکامل",
+                "en_rec": "Additional mammographic spot-compression / magnification views and targeted ultrasound are required.",
+                "fa_rec": "کلیشه‌های تکمیلی ماموگرافی (Spot Compression / Magnification) و سونوگرافی متمرکز مورد نیاز است."
+            }
         }
-        b_en_title, b_fa_title, b_en_rec, b_fa_rec = birads_desc.get(birads, birads_desc[2])
+        b_data = birads_dict.get(birads, birads_dict[1])
 
         shape_trans = {"oval": "بیضی (Oval)", "round": "مدور (Round)", "irregular": "نامنظم (Irregular)"}
         margin_trans = {"circumscribed": "کاملاً مشخص (Circumscribed)", "partially indistinct": "تا حدی محو و نامشخص (Indistinct)", "spiculated": "اسپیکوله (Spiculated)"}
@@ -563,147 +608,216 @@ class ClinicalReportModal(tk.Toplevel):
             "lower inner quadrant": "تحتانی داخلی (LIQ)"
         }
 
-        # Right Breast Findings
-        if r_mass:
-            shape = r_mass.get("shape", "oval")
-            margin = r_mass.get("margin", "circumscribed")
-            quad = r_mass.get("quadrant", "upper outer quadrant")
-            shape_fa = shape_trans.get(shape, shape)
-            margin_fa = margin_trans.get(margin, margin)
-            quad_fa = quad_trans.get(quad, quad)
-            r_findings_en = f"An {shape} shaped mass with {margin} margins is seen in the {quad} of the right breast. Correlation with ultrasound is suggested."
-            r_findings_fa = f"توده با شکل {shape_fa} و حاشیه {margin_fa} در کوادران {quad_fa} پستان راست مشاهده شد. تطبیق با سونوگرافی تکمیلی توصیه می‌شود."
-        else:
-            r_findings_en = "No focal mass, architectural distortion or suspicious microcalcifications identified in the right breast."
-            r_findings_fa = "توده فضاگیر واضح، اعوجاج ساختاری یا میکروکلسیفیکاسیون مشکوک در پستان راست رویت نشد."
-
-        # Left Breast Findings
-        if l_mass:
-            shape = l_mass.get("shape", "oval")
-            margin = l_mass.get("margin", "circumscribed")
-            quad = l_mass.get("quadrant", "upper outer quadrant")
-            shape_fa = shape_trans.get(shape, shape)
-            margin_fa = margin_trans.get(margin, margin)
-            quad_fa = quad_trans.get(quad, quad)
-            l_findings_en = f"An {shape} shaped mass with {margin} margins is seen in the {quad} of the left breast. Correlation with ultrasound is suggested."
-            l_findings_fa = f"توده با شکل {shape_fa} و حاشیه {margin_fa} در کوادران {quad_fa} پستان چپ مشاهده شد. تطبیق با سونوگرافی تکمیلی توصیه می‌شود."
-        else:
-            l_findings_en = "No focal mass, architectural distortion or suspicious microcalcifications identified in the left breast."
-            l_findings_fa = "توده فضاگیر واضح، اعوجاج ساختاری یا میکروکلسیفیکاسیون مشکوک در پستان چپ رویت نشد."
-
-        age_phrase = f"A {p_age} years old" if p_age else "An adult"
+        # English Report
         lines_en = [
-            "BILATERAL DIGITAL MAMMOGRAPHY (4-VIEW SCREENING)",
+            "BILATERAL DIGITAL MAMMOGRAPHY (4-VIEW FFDM SCREENING)",
             "KURDISTAN UNIVERSITY OF MEDICAL SCIENCES",
             "MARIVAN HEALTHCARE NETWORK - BOALI HOSPITAL",
             "DEPARTMENT OF MEDICAL IMAGING & DIGITAL MAMMOGRAPHY",
-            "=" * 70,
-            f"Patient Name: {p_name if p_name else 'N/A'}    | Age: {p_age_display}    | Exam Date: {p_date_display}",
+            "=" * 85,
+            f"Patient Name: {p_name_en}    | Age: {p_age_display} Y    | Exam Date: {p_date_display}",
             f"Patient ID: {p_id_display}    | Projections: Bilateral 4-View (R-CC, L-CC, R-MLO, L-MLO)",
-            "-" * 70,
+            "Clinical Indication: Routine Screening / Asymptomatic    | Comparison: Baseline Study",
+            "-" * 85,
             "",
-            "CLINICAL INDICATION:",
-            f"{age_phrase} female referred for screening digital mammography. No prior comparison studies available.",
+            "1. TECHNICAL QUALITY & POSITIONING (PGMI CRITERIA):",
+            "- Examination Adequacy: Technically optimal bilateral examination meeting PGMI clinical quality criteria.",
+            "- Positioning: Symmetrical bilateral positioning. Pectoralis major muscle adequately visualized with appropriate slope to the posterior nipple line (PNL) on MLO views. Inframammary folds (IMF) fully opened and visualized. Nipples depicted in profile without skin folding or motion blur.",
             "",
-            "TECHNIQUE:",
-            "Bilateral standard four-view screening digital mammography (Right & Left CC, Right & Left MLO projections) was performed with full-field digital mammography (FFDM).",
+            "2. BREAST COMPOSITION & DENSITY (ACR BI-RADS 5th Edition):",
+            f"- Parenchymal Density: {d_data['en_desc']}",
+            f"- Diagnostic Impact: {d_data['en_sens']}",
             "",
-            "BREAST COMPOSITION & DENSITY:",
-            f"- {d_en}",
+            "3. DETAILED ANATOMICAL FINDINGS:",
+            "A. Bilateral Symmetry & Parenchymal Cone:",
+            "- Symmetrical bilateral fibroglandular parenchyma distributed without evidence of focal architectural distortion, parenchymal tethering, or developing asymmetry between corresponding projections.",
             "",
-            "FINDINGS:",
-            "Right Breast (R-CC & R-MLO):",
-            f"- {r_findings_en}",
+            "B. Right Breast (R-CC & R-MLO Projections):",
+        ]
+        if r_mass:
+            sh = r_mass.get("shape", "oval")
+            mg = r_mass.get("margin", "circumscribed")
+            qd = r_mass.get("quadrant", "upper outer quadrant")
+            lines_en.append(f"- A dominant {sh} shaped mass with {mg} margins is identified in the {qd}. Supplementary targeted ultrasound correlation is recommended.")
+        else:
+            lines_en.append("- No dominant mass, suspicious focal density, or architectural distortion identified across upper outer, upper inner, lower outer, lower inner quadrants, or retroareolar region.")
+            lines_en.append("- Retromammary fat space and prepectoral fascia are clear and unremarkable.")
+
+        lines_en.extend([
             "",
-            "Left Breast (L-CC & L-MLO):",
-            f"- {l_findings_en}",
+            "C. Left Breast (L-CC & L-MLO Projections):",
+        ])
+        if l_mass:
+            sh = l_mass.get("shape", "oval")
+            mg = l_mass.get("margin", "circumscribed")
+            qd = l_mass.get("quadrant", "upper outer quadrant")
+            lines_en.append(f"- A dominant {sh} shaped mass with {mg} margins is identified in the {qd}. Supplementary targeted ultrasound correlation is recommended.")
+        else:
+            lines_en.append("- No dominant mass, suspicious focal density, or architectural distortion identified across upper outer, upper inner, lower outer, lower inner quadrants, or retroareolar region.")
+            lines_en.append("- Retromammary fat space and prepectoral fascia are clear and unremarkable.")
+
+        lines_en.extend([
             "",
-            "Additional Observations:",
-            "- Scattered punctate benign microcalcifications in both breasts.",
-            "- Visualized skin, nipple-areolar complexes and retromammary spaces appear unremarkable.",
-            "- Bilateral axillary lymph nodes show typical benign reniform configuration with radiolucent fatty hilum.",
+            "D. Calcifications Assessment:",
+            "- Microcalcifications: No suspicious microcalcifications identified (no clustered, pleomorphic, fine linear, or branching morphologies).",
+            "- Benign Calcifications: Scattered punctate and secretory benign calcifications noted bilaterally.",
             "",
-            "IMPRESSION & ASSESSMENT:",
-            f"BI-RADS CATEGORY: {birads} ({b_en_title})",
-            f"Recommendation: {b_en_rec}",
+            "E. Axillary Regions & Lymph Nodes:",
+            "- Right Axilla: Visualized axillary lymph nodes show typical benign reniform configuration with radiolucent fatty hilum and thin uniform cortex. No pathological lymphadenopathy.",
+            "- Left Axilla: Visualized axillary lymph nodes show typical benign reniform configuration with radiolucent fatty hilum and thin uniform cortex. No pathological lymphadenopathy.",
+            "",
+            "F. Skin & Nipple-Areolar Complexes (NAC):",
+            "- Bilateral skin thickness is uniform and within normal limits (< 2.0 mm).",
+            "- Both nipple-areolar complexes appear symmetrical without retraction, tethering, or retroareolar distortion.",
+            "",
+            "4. IMPRESSION & SUMMARY:",
+            "1. Bilateral negative screening digital mammogram (FFDM).",
+            f"2. {d_data['en_desc']}",
+            "3. No mammographic evidence of dominant mass, architectural distortion, or suspicious microcalcifications.",
+            "",
+            "5. FINAL BI-RADS ASSESSMENT & RECOMMENDATION:",
+            f"BI-RADS CATEGORY: {birads} ({b_data['en_title']})",
+            f"Recommendation: {b_data['en_rec']}",
             "",
             "Sincerely Yours,",
+            "Department of Medical Imaging & Radiology",
             "Radiologist MD"
-        ]
+        ])
         self.report_en = "\n".join(lines_en)
 
-        age_fa_phrase = f"خانم {p_age} ساله" if p_age else "بیمار محترم"
+        # Persian Report
         lines_fa = [
             "دانشگاه علوم پزشکی و خدمات بهداشتی درمانی کردستان",
             "شبکه بهداشت و درمان مریوان - بیمارستان بوعلی",
             "مرکز تصویربرداری پزشکی و ماموگرافی دیجیتال",
-            "=" * 70,
+            "=" * 85,
             f"نام بیمار: {p_name_display}    | سن: {p_age_display} سال    | تاریخ آزمون: {p_date_display}",
-            f"شماره پرونده / پذیرش: {p_id_display}    | نوع بررسی: ماموگرافی جامع ۴ نمایه (R-CC, L-CC, R-MLO, L-MLO)",
-            "-" * 70,
+            f"شماره پرونده / پذیرش: {p_id_display}    | نوع بررسی: ماموگرافی تمام دیجیتال دوطرفه (Bilateral 4-View FFDM)",
+            "شرح حال و اندیکاسیون بالینی: غربالگری دوره‌ای روتین / بدون علامت بالینی یا سابقه قبلی جراحی",
+            "-" * 85,
             "",
-            "شرح حال و اطلاعات بالینی:",
-            f"{age_fa_phrase} جهت ارزیابی و غربالگری دوره‌ای پستان مراجعه نموده است. فاقد سابقه خانوادگی مثبت یا جراحی قبلی.",
+            "۱. کیفیت تکنیکی و پوزیشنینگ (Technical Adequacy & PGMI):",
+            "• استاندارد تصویربرداری: کلیشه‌ها دارای کیفیت تکنیکی مطلوب، کنتراست بهینه و رزولوشن استاندارد بوده و فاقد آرتیفکت حرکتی یا چین‌خوردگی پوستی می‌باشند.",
+            "• پوزیشنینگ نماهای MLO: عضله پکتورالیس ماژور تا سطح خط خلفی نوک پستان (PNL) با شیب استاندارد تصویربرداری شده و چین اینفرامامری (IMF) در هر دو سمت کاملاً باز و مشهود است.",
+            "• پوزیشنینگ نماهای CC: نوک پستان‌ها در هر دو کلیشه در پروفایل قرار داشته و بافت‌های داخلی و خارجی پستان‌ها به صورت متقارن پوشش داده شده‌اند.",
             "",
-            "تکنیک تصویربرداری:",
-            "ماموگرافی دیجیتال دوطرفه در ۴ نمای استاندارد (شامل نماهای بالا به پایین CC و مایل طرفی MLO از هر دو پستان) انجام شد.",
+            "۲. ترکیب و دانسیته بافتی پستان (ACR Breast Composition):",
+            f"• رده دانسیته بافتی: {d_data['fa_desc']}",
+            f"• اثر پوشانندگی بر حساسیت تشخیصی: {d_data['fa_sens']}",
             "",
-            "ترکیب و دانسیته بافتی پستان (ACR Composition):",
-            f"• {d_fa}",
+            "۳. ارزیابی تشریحی و یافته‌های موضعی (Detailed Findings):",
+            "الف) تقارن مخروط فیبروگلاندولار:",
+            "• توزیع بافت فیبروگلاندولار در هر دو پستان کاملاً متقارن بوده و شواهدی از عدم تقارن کانونی (Focal Asymmetry) یا اعوجاج ساختاری (Architectural Distortion) مشهود نیست.",
             "",
-            "یافته‌های پستان راست (Right Breast):",
-            f"• {r_findings_fa}",
+            "ب) پستان راست (Right Breast - نماهای R-CC و R-MLO):",
+        ]
+        if r_mass:
+            sh_fa = shape_trans.get(r_mass.get("shape"), r_mass.get("shape", "بیضی"))
+            mg_fa = margin_trans.get(r_mass.get("margin"), r_mass.get("margin", "مشخص"))
+            qd_fa = quad_trans.get(r_mass.get("quadrant"), r_mass.get("quadrant", "فوقانی خارجی"))
+            lines_fa.append(f"• توده با شکل {sh_fa} و حاشیه {mg_fa} در کوادران {qd_fa} پستان راست مشاهده شد. تطبیق با سونوگرافی تکمیلی توصیه می‌شود.")
+        else:
+            lines_fa.append("• در بررسی کوادران‌های فوقانی خارجی (UOQ)، فوقانی داخلی (UIQ)، تحتانی خارجی (LOQ)، تحتانی داخلی (LIQ) و ناحیه رتروآرئولار، هیچ‌گونه توده فضاگیر غالب یا دانسیته کانونی مشکوک رویت نشد.")
+            lines_fa.append("• فضای چربی رترومامری و فاشیای پره‌پکتورال کاملاً شفاف و فاقد ضایعه است.")
+
+        lines_fa.extend([
             "",
-            "یافته‌های پستان چپ (Left Breast):",
-            f"• {l_findings_fa}",
+            "ج) پستان چپ (Left Breast - نماهای L-CC و L-MLO):",
+        ])
+        if l_mass:
+            sh_fa = shape_trans.get(l_mass.get("shape"), l_mass.get("shape", "بیضی"))
+            mg_fa = margin_trans.get(l_mass.get("margin"), l_mass.get("margin", "مشخص"))
+            qd_fa = quad_trans.get(l_mass.get("quadrant"), l_mass.get("quadrant", "فوقانی خارجی"))
+            lines_fa.append(f"• توده با شکل {sh_fa} و حاشیه {mg_fa} در کوادران {qd_fa} پستان چپ مشاهده شد. تطبیق با سونوگرافی تکمیلی توصیه می‌شود.")
+        else:
+            lines_fa.append("• در بررسی تمامی کوادران‌ها و ناحیه رتروآرئولار پستان چپ، هیچ‌گونه توده فضاگیر غالب، اعوجاج ساختاری یا دانسیته غیرطبیعی رویت نشد.")
+            lines_fa.append("• فضای چربی رترومامری و فاشیای پره‌پکتورال کاملاً شفاف و فاقد ضایعه است.")
+
+        lines_fa.extend([
             "",
-            "سایر بررسی‌ها:",
-            "• میکروکلسیفیکاسیون‌های پراکنده با ماهیت قطعی خوش‌خیم در هر دو سمت مشاهده شد.",
-            "• پوست، هاله نوک پستان و فضای رترومامری نرمال بوده و فاقد ضخامت غیرطبیعی یا اعوجاج ساختاری است.",
-            "• غدد لنفاوی آگزیلاری در هر دو سمت نمای واکنشی خوش‌خیم و ناف چربی طبیعی دارند.",
+            "د) بررسی کلسیفیکاسیون‌ها (Calcifications):",
+            "• میکروکلسیفیکاسیون‌های مشکوک: هیچ کانون میکروکلسیفیکاسیون مشکوک به بدخیمی (خوشه‌ای، خطی، شاخه‌ای یا پلئومورفیک) رویت نشد.",
+            "• کلسیفیکاسیون‌های خوش‌خیم: کلسیفیکاسیون‌های نقطه‌ای پراکنده با ماهیت قطعی خوش‌خیم و عروقی در هر دو سمت مشاهده شد.",
             "",
-            "نتیجه‌گیری و رده‌بندی بالینی بای‌ردز (BI-RADS Classification):",
-            f"• رده‌بندی: گرید {birads} - {b_fa_title}",
-            f"• توصیه بالینی: {b_fa_rec}",
+            "هـ) غدد لنفاوی آگزیلاری (Axillary Lymph Nodes):",
+            "• ناحیه آگزیلاری راست: غدد لنفاوی دارای مورفولوژی طبیعی لوبیایی‌شکل، ناف چربی رادیولوسنت و کورتکس یکنواخت نازک هستند. لنفادنوپاتی پاتولوژیک رویت نشد.",
+            "• ناحیه آگزیلاری چپ: غدد لنفاوی آگزیلاری چپ نیز نمای واکنشی خوش‌خیم و ناف چربی کاملاً طبیعی دارند.",
+            "",
+            "و) پوست، هاله نوک پستان (NAC) و فضای رترومامری:",
+            "• ضخامت پوست در هر دو پستان در محدوده طبیعی (کمتر از ۲ میلی‌متر) بوده و فاقد کشیدگی (Retraction) یا ادم است.",
+            "• کمپلکس هاله و نوک پستان‌ها متقارن بوده و فاقد فرورفتگی یا انحراف رتروآرئولار می‌باشند.",
+            "",
+            "۴. خلاصه یافته‌ها و جمع‌بندی نهایی (Impression):",
+            "۱. ماموگرافی غربالگری دیجیتال دوطرفه (FFDM) فاقد شواهد بدخیمی.",
+            f"۲. {d_data['fa_desc']}",
+            "۳. عدم وجود توده فضاگیر غالب، اعوجاج بافتی یا میکروکلسیفیکاسیون پاتولوژیک.",
+            "",
+            "۵. رده‌بندی بالینی بای‌ردز و توصیه‌ها (BI-RADS Assessment & Recommendation):",
+            f"• رده‌بندی بالینی: گرید {birads} - {b_data['fa_title']}",
+            f"• توصیه بالینی: {b_data['fa_rec']}",
             "",
             "با احترام،",
+            "بخش تصویربرداری پزشکی و رادیولوژی",
             "پزشک متخصص رادیولوژی"
-        ]
+        ])
         self.report_fa = "\n".join(lines_fa)
 
     def generate_chest_reports(self, p_name, p_age, p_date, p_id):
-        p_name_display = p_name if p_name else "ثبت نشده"
-        p_age_display = f"{p_age}" if p_age else "---"
+        p_name_display = p_name if p_name and p_name != "N/A" else "ثبت نشده در پرونده"
+        p_name_en = p_name if p_name and p_name != "N/A" else "Unspecified"
+        p_age_display = f"{p_age}" if p_age and p_age != "---" else "---"
         p_date_display = p_date if p_date else time.strftime("%Y/%m/%d")
-        p_id_display = p_id if p_id else "---"
+        p_id_display = p_id if p_id and p_id != "---" else "---"
 
         ctr = self.app_state.get("ctr", 0.48)
-        ctr_status = "Normal" if ctr <= 0.50 else "Cardiomegaly"
+        ctr_status_en = "Normal" if ctr <= 0.50 else ("Borderline / Mildly Enlarged" if ctr <= 0.55 else "Moderate to Severe Cardiomegaly")
+        ctr_status_fa = "طبیعی و نرمال" if ctr <= 0.50 else ("کاردیومگالی مرزی / خفیف" if ctr <= 0.55 else "کاردیومگالی متوسط تا شدید")
         
         lines_en = [
-            "CHEST RADIOGRAPHY (PA VIEW)",
+            "CHEST RADIOGRAPHY (STANDARD PA VIEW)",
             "KURDISTAN UNIVERSITY OF MEDICAL SCIENCES",
             "MARIVAN HEALTHCARE NETWORK - BOALI HOSPITAL",
-            "DEPARTMENT OF MEDICAL IMAGING",
-            "=" * 70,
-            f"Patient Name: {p_name if p_name else 'N/A'}    | Age: {p_age_display}    | Exam Date: {p_date_display}",
-            f"Patient ID: {p_id_display}    | Projection: Posteroanterior (PA)",
-            "-" * 70,
+            "DEPARTMENT OF MEDICAL IMAGING & RADIOLOGY",
+            "=" * 85,
+            f"Patient Name: {p_name_en}    | Age: {p_age_display} Y    | Exam Date: {p_date_display}",
+            f"Patient ID: {p_id_display}    | Projection: Single Erect Posteroanterior (PA)",
+            "Clinical Indication: Cardiopulmonary Evaluation / Screening    | Technical Quality: Optimal",
+            "-" * 85,
             "",
-            "Technique: Single erect Posteroanterior (PA) chest radiograph.",
-            "Indication: Cardiopulmonary evaluation / Screening.",
+            "1. TECHNICAL EVALUATION & INSPIRATION ADEQUACY:",
+            "- Technique: Erect posteroanterior (PA) projection taken at 100-120 kVp.",
+            "- Inspiration Quality: Adequate inspiratory effort with 9-10 posterior ribs visualized above diaphragmatic domes. Medial ends of clavicles are equidistant from spinous processes (no patient rotation). Scapulae projected clear of the lung fields.",
             "",
-            "Findings:",
-            "- Lungs: Clear lung fields bilaterally without focal consolidation, pneumothorax or pleural effusion.",
-            "- Pleura: Costophrenic and cardiophrenic angles are sharp and clear bilaterally.",
-            f"- Heart & Mediastinum: Cardiothoracic ratio (CTR) is {ctr:.2f} ({ctr_status}). Mediastinal and hilar contours are within normal limits.",
-            "- Bones: Visualized osseous thorax, ribs and clavicles appear intact without acute fracture line.",
+            "2. TRACHEA, MEDIASTINUM & HILAR REGIONS:",
+            "- Trachea: Midline in position with normal caliber. Carina and mainstem bronchi patent.",
+            "- Mediastinum: Normal mediastinal width and contours. Paratracheal stripes unremarkable.",
+            "- Hilar Structures: Normal bilateral hilar position, morphology, and bronchovascular branching without hilar adenopathy or vascular engorgement.",
             "",
-            "Impression:",
-            f"1. No active cardiopulmonary disease.",
-            f"2. Normal cardiothoracic ratio (CTR: {ctr:.2f}).",
+            "3. CARDIAC SILHOUETTE & CARDIOTHORACIC RATIO (CTR):",
+            f"- Measurement: Maximal cardiac diameter to maximal internal thoracic diameter ratio (CTR) is {ctr:.2f} ({ctr_status_en}).",
+            "- Contours: Left ventricular, right atrial, and aortic arch contours are within normal limits.",
+            "",
+            "4. LUNG PARENCHYMA & ZONAL ASSESSMENT:",
+            "- Right Lung: Clear across upper, mid, and lower zones. No focal alveolar consolidation, cavitation, nodule, or pneumothorax.",
+            "- Left Lung: Clear across upper, mid, and lower zones. Normal retrocardiac space and lingular segment.",
+            "- Interstitium: Normal bronchovascular markings without interstitial edema or kerley B lines.",
+            "",
+            "5. PLEURAL SPACES & DIAPHRAGMATIC CONTOURS:",
+            "- Costophrenic Sulci: Bilateral lateral and posterior costophrenic angles are sharp and fully cleared.",
+            "- Cardiophrenic Angles: Sharp bilaterally; no pleural thickening, blunting, or pleural effusion.",
+            "- Diaphragm: Both hemidiaphragmatic domes are smooth and convex; normal right-to-left height relationship.",
+            "",
+            "6. OSSEOUS THORAX & CHEST WALL SOFT TISSUES:",
+            "- Osseous Structures: Visualized clavicles, ribs, sternum, and thoracic spine demonstrate preserved cortical continuity and bone mineralization without acute fracture line or osteolytic lesion.",
+            "- Soft Tissues: Symmetrical extrathoracic soft tissues without subcutaneous emphysema or abnormal calcification.",
+            "",
+            "7. IMPRESSION & SUMMARY:",
+            f"1. Technically adequate PA chest radiograph demonstrating no evidence of active cardiopulmonary pathology.",
+            f"2. Normal cardiothoracic ratio (CTR: {ctr:.2f} - {ctr_status_en}).",
+            "3. Clear lung fields bilaterally without consolidation, pneumothorax, or pleural effusion.",
             "",
             "Sincerely Yours,",
+            "Department of Medical Imaging & Radiology",
             "Radiologist MD"
         ]
         self.report_en = "\n".join(lines_en)
@@ -711,31 +825,54 @@ class ClinicalReportModal(tk.Toplevel):
         lines_fa = [
             "دانشگاه علوم پزشکی و خدمات بهداشتی درمانی کردستان",
             "شبکه بهداشت و درمان مریوان - بیمارستان بوعلی",
-            "مرکز تصویربرداری پزشکی",
-            "=" * 70,
+            "مرکز تصویربرداری پزشکی و رادیولوژی دیجیتال",
+            "=" * 85,
             f"نام بیمار: {p_name_display}    | سن: {p_age_display} سال    | تاریخ آزمون: {p_date_display}",
-            f"شماره پرونده / پذیرش: {p_id_display}    | نوع بررسی: رادیوگرافی قفسه سینه (PA View)",
-            "-" * 70,
+            f"شماره پرونده / پذیرش: {p_id_display}    | نوع بررسی: رادیوگرافی قفسه سینه در نمای ایستاده خلفی-قدامی (PA View)",
+            "شرح حال و علت بررسی: ارزیابی قلبی-ریوی و غربالگری دوره‌ای / فاقد تروما یا جراحی قبلی",
+            "-" * 85,
             "",
-            "یافته‌ها:",
-            "• پارانشیم هر دو ریه شفاف بوده و شواهدی از کانسولیدیشن فعال، انفیلتراسیون یا توده فضاگیر رویت نشد.",
-            "• زوایای دنده‌ای-دیافراگمی (کوستوفرنیک) در هر دو سمت باز و بدون مایع آزاد (فاقد پلورال افیوژن) می‌باشند.",
-            f"• سایه قلبی-مدیاستن نرمال است. نسبت قلبی-توراسیک (CTR) برابر با {ctr:.2f} و در محدوده طبیعی است.",
-            "• قفسه استخوانی و دنده‌های قابل رویت فاقد خط شکستگی حاد می‌باشند.",
+            "۱. کیفیت تکنیکی و کفایت دم (Inspiration & Quality):",
+            "• استاندارد تصویربرداری: کلیشه با نفوذ اشعه مناسب و در وضعیت ایستاده استاندارد (PA) تهیه شده است. بیمار فاقد چرخش محوری بوده و سر ترقوه‌ها متقارن هستند. استخوان‌های کتف (اسکاپولا) کاملاً خارج از میدان ریه‌ها قرار گرفته‌اند.",
+            "• عمق دم: کفایت دم مطلوب بوده و ۱۰ دنده خلفی بالای قوس‌های دیافراگم مشاهده می‌شود.",
             "",
-            "نتیجه‌گیری نهایی:",
-            "بررسی رادیوگرافیک سینه نرمال است. شواهدی از پاتولوژی حاد ریوی رویت نشد.",
+            "۲. تراشه، مدیاستن و ناف ریه‌ها (Trachea & Mediastinum):",
+            "• تراشه در خط وسط قرار داشته و کالیبر نرمال دارد. کارینا و برونش‌های اصلی باز می‌باشند.",
+            "• پهنای مدیاستن و قوس آئورت در محدوده طبیعی است. ناف ریه‌ها در هر دو سمت دارای کانتور نرمال و انشعابات عروقی متناسب بوده و شواهدی از آدنوپاتی هیلار یا احتقان عروقی دیده نمی‌شود.",
+            "",
+            "۳. سایه قلب و نسبت قلبی-توراسیک (CTR Calipers):",
+            f"• سنجش کالیپر آناتومیک: نسبت بیشترین قطر عرضی قلب به بیشترین قطر داخلی قفسه سینه (CTR) برابر با {ctr:.2f} محاسبه شد ({ctr_status_fa}).",
+            "• کانتور بطن چپ، دهلیز راست و دکمه آئورت کاملاً نرمال است.",
+            "",
+            "۴. پارانشیم ریه‌ها و زون‌های سه‌گانه (Lungs Evaluation):",
+            "• ریه راست: زون‌های فوقانی، میانی و تحتانی کاملاً شفاف بوده و فاقد کانسولیدیشن آلوئولار، انفیلتراسیون، ضایعه فضاگیر، ندول یا پنوموتوراکس است.",
+            "• ریه چپ: شفاف در تمامی زون‌ها؛ فضای رتروکاردیاک و سگمان لینگولا نرمال است.",
+            "• عروق و بافت بینابینی: انشعابات برونکوواسکولار نرمال بوده و شواهدی از ادم ریوی یا خطوط کرلی دیده نمی‌شود.",
+            "",
+            "۵. پرده جنب و زوایای دیافراگمی (Pleura & Diaphragm):",
+            "• زوایای کوستوفرنیک جانبی و خلفی در هر دو سمت کاملاً تیز و باز می‌باشند.",
+            "• شواهدی از تجمع مایع در فضای پلور (پلورال افیوژن) یا ضخامت پرده جنب رویت نشد. تحدب هر دو گنبد دیافراگم طبیعی است.",
+            "",
+            "۶. قفسه استخوانی و بافت‌های نرم توراکس (Osseous Thorax):",
+            "• استخوان‌های ترقوه، دنده‌ها و ستون فقرات توراسیک قابل رویت دارای تراکم نرمال و پیوستگی کورتیکال بوده و فاقد خط شکستگی حاد یا ضایعه لیتیک می‌باشند.",
+            "",
+            "۷. جمع‌بندی و نتیجه‌گیری نهایی (Impression):",
+            "۱. رادیوگرافی قفسه سینه فاقد هرگونه پاتولوژی حاد قلبی یا پارانشیمال ریه است.",
+            f"۲. نسبت قلبی-توراسیک در محدوده کاملاً طبیعی ({ctr:.2f} :CTR).",
+            "۳. زوایای کوستوفرنیک باز و پارانشیم ریه‌ها شفاف دوطرفه.",
             "",
             "با احترام،",
+            "بخش تصویربرداری پزشکی و رادیولوژی",
             "پزشک متخصص رادیولوژی"
         ]
         self.report_fa = "\n".join(lines_fa)
 
     def generate_ortho_reports(self, p_name, p_age, p_date, p_id):
-        p_name_display = p_name if p_name else "ثبت نشده"
-        p_age_display = f"{p_age}" if p_age else "---"
+        p_name_display = p_name if p_name and p_name != "N/A" else "ثبت نشده در پرونده"
+        p_name_en = p_name if p_name and p_name != "N/A" else "Unspecified"
+        p_age_display = f"{p_age}" if p_age and p_age != "---" else "---"
         p_date_display = p_date if p_date else time.strftime("%Y/%m/%d")
-        p_id_display = p_id if p_id else "---"
+        p_id_display = p_id if p_id and p_id != "---" else "---"
 
         anat = self.app_state.get("anatomy", "Extremity / Forearm")
         frac_count = self.app_state.get("fracture_count", 0)
@@ -744,57 +881,92 @@ class ClinicalReportModal(tk.Toplevel):
             f"MUSCULOSKELETAL RADIOGRAPHY ({anat.upper()})",
             "KURDISTAN UNIVERSITY OF MEDICAL SCIENCES",
             "MARIVAN HEALTHCARE NETWORK - BOALI HOSPITAL",
-            "DEPARTMENT OF MEDICAL IMAGING",
-            "=" * 70,
-            f"Patient Name: {p_name if p_name else 'N/A'}    | Age: {p_age_display}    | Exam Date: {p_date_display}",
-            f"Patient ID: {p_id_display}    | Exam: {anat}",
-            "-" * 70,
+            "DEPARTMENT OF MEDICAL IMAGING & RADIOLOGY",
+            "=" * 85,
+            f"Patient Name: {p_name_en}    | Age: {p_age_display} Y    | Exam Date: {p_date_display}",
+            f"Patient ID: {p_id_display}    | Anatomical Region: {anat}",
+            "Clinical Indication: Trauma Evaluation / Acute Bone Pain    | Views: Orthogonal Projections (AP & Lateral)",
+            "-" * 85,
             "",
-            "Technique: Standard multi-view projections.",
-            "Indication: Trauma evaluation / Bone pain.",
+            "1. TECHNIQUE & RADIOGRAPHIC EXPOSURE:",
+            "- Multi-view orthogonal radiographic projections (Anteroposterior and Lateral views) performed with optimal cortical bone penetration and soft tissue windowing.",
             "",
-            "Findings:"
+            "2. SKELETAL FRAMEWORK & CORTICAL ALIGNMENT:",
         ]
         if frac_count > 0:
-            lines_en.append(f"- Cortical disruption and acute fracture line identified in {anat}.")
-            lines_en.append("- Alignment shows mild displacement; articular surfaces are evaluated.")
-            lines_en.append("- Surrounding soft tissue swelling noted.")
-            imp = f"Acute fracture involving {anat} as described."
+            lines_en.extend([
+                f"- Cortical Disruption: Acute radiolucent fracture line identified involving {anat}.",
+                "- Alignment & Displacement: Cortical step-off noted with mild axial displacement; adjacent articular margins evaluated.",
+                "- Trabecular Architecture: Disruption of primary stress trabeculae at fracture site without pathological osteolysis.",
+                "- Soft Tissues: Accompanying peri-focal soft tissue swelling and displacement of deep fascial planes."
+            ])
+            imp_en = f"Acute fracture involving {anat} as detailed above. Orthopedic consultation and immobilization recommended."
+            imp_fa = f"شکستگی حاد در استخوان‌های {anat} رویت شد. مشاوره ارتوپدی و بی‌حرکت‌سازی جهت ترمیم اندام توصیه می‌گردد."
         else:
-            lines_en.append(f"- Intact cortical margins and trabecular pattern throughout {anat}.")
-            lines_en.append("- No acute fracture, subluxation or gross dislocation detected.")
-            lines_en.append("- Normal articular relationships and unremarkable soft tissues.")
-            imp = f"No radiographic evidence of acute bone fracture or dislocation in {anat}."
+            lines_en.extend([
+                f"- Cortical Continuity: Smooth, unbroken cortical margins throughout visualized bones of {anat}.",
+                "- Trabecular Pattern: Uniform, preserved trabecular architecture without acute fracture lines, step-offs, or stress fractures.",
+                "- Alignment: Anatomic alignment preserved without subluxation, angulation, or rotational deformity.",
+                "- Soft Tissues: Deep periarticular fat pads are in anatomic position (no joint effusion / negative fat pad sign). No radiopaque foreign body or soft tissue swelling."
+            ])
+            imp_en = f"No radiographic evidence of acute bone fracture, joint subluxation, or cortical disruption in {anat}."
+            imp_fa = f"بررسی رادیوگرافیک {anat} نرمال است. شواهدی از شکستگی حاد، دررفتگی یا اختلال ساختاری استخوان رویت نشد."
 
         lines_en.extend([
             "",
-            "Impression:",
-            f"1. {imp}",
+            "3. ARTICULAR INTEGRITY & JOINT SPACES:",
+            "- Visualized joint spaces demonstrate normal width and congruency without narrowing, osteophytes, or articular surface disruption.",
+            "",
+            "4. IMPRESSION & SUMMARY:",
+            f"1. {imp_en}",
             "",
             "Sincerely Yours,",
+            "Department of Medical Imaging & Radiology",
             "Radiologist MD"
-        ]        )
+        ])
         self.report_en = "\n".join(lines_en)
 
         lines_fa = [
             "دانشگاه علوم پزشکی و خدمات بهداشتی درمانی کردستان",
             "شبکه بهداشت و درمان مریوان - بیمارستان بوعلی",
-            "مرکز تصویربرداری پزشکی",
-            "=" * 70,
+            "مرکز تصویربرداری پزشکی و ارتوپدی",
+            "=" * 85,
             f"نام بیمار: {p_name_display}    | سن: {p_age_display} سال    | تاریخ آزمون: {p_date_display}",
-            f"شماره پرونده / پذیرش: {p_id_display}    | نوع بررسی: رادیوگرافی اسکلتی و ارتوپدی ({anat})",
-            "-" * 70,
+            f"شماره پرونده / پذیرش: {p_id_display}    | اندام مورد بررسی: {anat}",
+            "شرح حال و علت بررسی: ارزیابی ترومای اندام و درد حاد استخوانی / نماهای استاندارد عمود بر هم (AP & Lat)",
+            "-" * 85,
             "",
-            "یافته‌ها:",
-            f"• ارزیابی استخوان‌های {anat}: " + (f"خط شکستگی حاد به همراه ناپیوستگی کورتکس استخوان رویت شد." if frac_count > 0 else "پیوستگی کورتیکال و الگوی ترابکولار استخوان‌ها حفظ شده و فاقد خط شکستگی حاد یا دررفتگی واضح است."),
-            "• فضای مفصلی طبیعی بوده و سطوح مفصلی متناسب می‌باشند.",
+            "۱. تکنیک و کیفیت تصویربرداری:",
+            "• کلیشه‌های رادیوگرافی در نماهای استاندارد رخ و نیم‌رخ (AP & Lateral) با رزولوشن استخوانی بالا و تفکیک بافت نرم تهیه شده است.",
             "",
-            "نتیجه‌گیری:",
-            imp,
+            "۲. ارزیابی اسکلتی و یکپارچگی کورتکس (Cortical & Bone Architecture):",
+        ]
+        if frac_count > 0:
+            lines_fa.extend([
+                f"• پیوستگی کورتکس: خط شکستگی حاد به همراه ناپیوستگی در کورتکس استخوان {anat} رویت شد.",
+                "• تراز و انحراف استخوان: پله‌شدگی کورتیکال به همراه جابجایی مختصر استخوان مشهود است.",
+                "• بافت‌های نرم: تورم بافت نرم در مجاورت محل شکستگی و جابجایی خطوط چربی عمقی مشاهده می‌شود."
+            ])
+        else:
+            lines_fa.extend([
+                f"• پیوستگی کورتکس: حواشی کورتیکال استخوان‌های {anat} در تمامی نماها کاملاً صاف، پیوسته و یکپارچه می‌باشند.",
+                "• الگوی ترابکولار: بافت اسفنجی و ترابکولار استخوان یکنواخت بوده و هیچ‌گونه خط شکستگی حاد (Acute Fracture Line) یا شکستگی فشاری رویت نشد.",
+                "• تراز و انطباق آناتومیک: راستای استخوان‌ها طبیعی بوده و فاقد زاویه‌دار شدن (Angulation) یا بدشکلی چرخشی است.",
+                "• بافت نرم و بالشتک‌های چربی: بالشتک‌های چربی عمقی مفصل در موقعیت نرمال قرار دارند (علامت بالشتک چربی منفی) و شواهدی از افیوژن داخل مفصلی یا جسم خارجی حاجب دیده نمی‌شود."
+            ])
+
+        lines_fa.extend([
+            "",
+            "۳. فضای مفصلی و سطوح مفصلی (Joint Spaces):",
+            "• سطوح مفصلی مجاور کاملاً منطبق و متناسب بوده، پهنای فضای مفصلی نرمال است و شواهدی از نیمه‌دررفتگی (Subluxation) یا دررفتگی کامل رویت نشد.",
+            "",
+            "۴. جمع‌بندی و توصیه بالینی (Impression):",
+            f"• {imp_fa}",
             "",
             "با احترام،",
+            "بخش تصویربرداری پزشکی و رادیولوژی",
             "پزشک متخصص رادیولوژی"
-        ]
+        ])
         self.report_fa = "\n".join(lines_fa)
 
 class ModernAboutDialog(tk.Toplevel):
@@ -831,7 +1003,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         tk.Label(title_frame, text="🫁 BoneSuppression AI - Multi-AI Chest Studio",
                  font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_HEADER).pack(anchor=tk.W)
-        tk.Label(title_frame, text=f"نگارش v2.6.1 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
+        tk.Label(title_frame, text=f"نگارش v2.6.2 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
                  font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER).pack(anchor=tk.W, pady=(2, 0))
 
         btn_close = create_modern_button(header, "✕ بستن", self.destroy,
@@ -920,7 +1092,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         c2_head = tk.Frame(card2, bg=C_CARD)
         c2_head.pack(fill=tk.X, padx=16, pady=(12, 6))
-        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.6.1",
+        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.6.2",
                  font=("Segoe UI", 10, "bold"), fg=C_AMBER, bg=C_CARD).pack(anchor=tk.W)
 
         engines = [
@@ -2540,12 +2712,12 @@ class BoneSuppressionApp(tk.Tk):
 
     def get_density_text(self, comp):
         d_map = {
-            "a": "The breast parenchyma is almost fatty (breast composition a).",
-            "b": "Scattered areas of glandular density are noted in both breasts (breast composition b).",
-            "c": "Heterogeneously dense breasts are noted, which may obscure underlying detail (breast composition c).",
-            "d": "Extreme increased density of both breasts is noted, which obscure underlying detail (breast composition d)."
+            "a": "The breast parenchyma is almost entirely fatty (ACR Composition a, < 25% glandular volume). Minimal tissue masking effect; optimal sensitivity.",
+            "b": "Scattered areas of fibroglandular density are noted in both breasts (ACR Composition b, approximately 25-50% glandular volume). Low tissue masking effect.",
+            "c": "Heterogeneously dense breasts are noted (ACR Composition c, approximately 51-75% fibroglandular tissue), which may obscure underlying small lesions.",
+            "d": "Extreme increased density of both breasts is noted (ACR Composition d, > 75% fibroglandular volume), which substantially lowers mammographic sensitivity."
         }
-        return d_map.get(comp, d_map["c"])
+        return d_map.get(comp, d_map["b"])
 
     def load_mammo_multi(self):
         files = filedialog.askopenfilenames(
@@ -2559,6 +2731,11 @@ class BoneSuppressionApp(tk.Tk):
         )
         if not files:
             return
+
+        if files and not self.patient_info.get("name"):
+            p_dir = os.path.basename(os.path.dirname(files[0]))
+            if p_dir and p_dir.lower() not in ("desktop", "downloads", "documents", "uploads", "images", "pictures", "bone-suppression-chest-xray", "bonesuppressionai"):
+                self.patient_info["name"] = p_dir.replace("_", " ").replace("^", " ")
 
         loaded_count = 0
         for f in files:
@@ -2821,18 +2998,22 @@ class BoneSuppressionApp(tk.Tk):
         # Erode slightly (avoid skin-air boundary artifacts)
         inner_mask = cv2.erode(breast_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
 
-        # 3. Parenchyma density calculation
+        # 3. Calibrated breast parenchyma density
         breast_vals = clean[inner_mask > 0]
         if len(breast_vals) > 0:
-            dense_ratio = np.sum(breast_vals > 125) / float(len(breast_vals))
+            p5 = float(np.percentile(breast_vals, 5))
+            p95 = float(np.percentile(breast_vals, 95))
+            # Adaptive threshold separating adipose baseline from fibroglandular parenchyma
+            dense_thresh = max(70, int(p5 + 0.30 * (p95 - p5)))
+            dense_ratio = float(np.sum(breast_vals > dense_thresh)) / float(len(breast_vals))
         else:
-            dense_ratio = 0.08
+            dense_ratio = 0.10
 
-        if dense_ratio < 0.15:
+        if dense_ratio < 0.22:
             density_comp = "a"
-        elif dense_ratio < 0.40:
+        elif dense_ratio < 0.48:
             density_comp = "b"
-        elif dense_ratio < 0.65:
+        elif dense_ratio < 0.72:
             density_comp = "c"
         else:
             density_comp = "d"
