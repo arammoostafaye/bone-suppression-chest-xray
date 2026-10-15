@@ -831,7 +831,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         tk.Label(title_frame, text="🫁 BoneSuppression AI - Multi-AI Chest Studio",
                  font=("Segoe UI", 13, "bold"), fg=C_CYAN, bg=C_HEADER).pack(anchor=tk.W)
-        tk.Label(title_frame, text=f"نگارش v2.6.0 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
+        tk.Label(title_frame, text=f"نگارش v2.6.1 | {HOSPITAL_TITLE} - {NETWORK_TITLE}",
                  font=("Segoe UI", 9), fg=C_TEXT_MUTED, bg=C_HEADER).pack(anchor=tk.W, pady=(2, 0))
 
         btn_close = create_modern_button(header, "✕ بستن", self.destroy,
@@ -920,7 +920,7 @@ class ModernAboutDialog(tk.Toplevel):
 
         c2_head = tk.Frame(card2, bg=C_CARD)
         c2_head.pack(fill=tk.X, padx=16, pady=(12, 6))
-        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.6.0",
+        tk.Label(c2_head, text="🧠 ۵ موتور هوش مصنوعی یکپارچه‌شده در نسخه v2.6.1",
                  font=("Segoe UI", 10, "bold"), fg=C_AMBER, bg=C_CARD).pack(anchor=tk.W)
 
         engines = [
@@ -1188,12 +1188,16 @@ class BoneSuppressionApp(tk.Tk):
         btn_skip.pack(pady=(14, 0))
 
     def show_splash(self):
+        self.splash_active = True
         self.splash_container.pack(fill=tk.BOTH, expand=True)
-        self.splash_progress.start(10)
-        self.splash_step(0)
+        try:
+            self.splash_progress.start(10)
+        except Exception:
+            pass
+        self.after(100, lambda: self.splash_step(0))
 
     def splash_step(self, step):
-        if not self.splash_container.winfo_ismapped():
+        if not getattr(self, "splash_active", False):
             return
         if step < len(self.tree_labels):
             lbl, full_text = self.tree_labels[step]
@@ -1204,13 +1208,15 @@ class BoneSuppressionApp(tk.Tk):
                 "آماده‌سازی ماژول‌های رادیولوژی و پردازش تصویر...",
                 "تأیید هویت کاربری و بارگذاری ورک‌استیشن..."
             ]
-            self.splash_status.config(text=msgs[step])
+            if step < len(msgs):
+                self.splash_status.config(text=msgs[step])
             self.after(550, lambda: self.splash_step(step + 1))
         else:
             self.splash_status.config(text="✓ سامانه آماده به کار است. ورود به برنامه...")
             self.after(700, self.end_splash)
 
     def end_splash(self):
+        self.splash_active = False
         try:
             self.splash_progress.stop()
         except Exception:
@@ -2501,6 +2507,11 @@ class BoneSuppressionApp(tk.Tk):
     # -------------------------------------------------------------------------
     def open_report_dialog(self):
         mod = self.active_ai_module.get()
+        if mod == "mammo" and not self.mammo_results:
+            loaded_views = [v for v in self.mammo_views.values() if v is not None and v.get("arr") is not None]
+            if loaded_views or self.original_np is not None:
+                self.run_mammo_inference()
+
         rep_type = "mammo" if mod == "mammo" else ("ortho" if mod == "fracture" else "chest")
         app_state = {
             "mammo": self.mammo_results,
@@ -2759,64 +2770,113 @@ class BoneSuppressionApp(tk.Tk):
             self.status_label.config(text="خطا در ماژول ماموگرافی", fg=C_RED)
 
     def analyze_mammogram(self, gray_img, slot_name=None):
-        h, w = gray_img.shape
-        thresh = cv2.threshold(gray_img, 15, 255, cv2.THRESH_BINARY)[1]
-        breast_mask = (thresh > 0)
+        orig_h, orig_w = gray_img.shape
+        max_dim = 1600
+        if max(orig_h, orig_w) > max_dim:
+            scale = max_dim / float(max(orig_h, orig_w))
+            clean_gray = cv2.resize(gray_img, (int(orig_w * scale), int(orig_h * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            scale = 1.0
+            clean_gray = gray_img
+
+        h, w = clean_gray.shape
 
         if slot_name:
             side = "Right" if slot_name.startswith("R") else "Left"
         else:
-            left_sum = np.sum(gray_img[:, :int(w*0.15)])
-            right_sum = np.sum(gray_img[:, int(w*0.85):])
+            left_sum = np.sum(clean_gray[:, :int(w*0.15)])
+            right_sum = np.sum(clean_gray[:, int(w*0.85):])
             side = "Right" if left_sum > right_sum else "Left"
 
-        breast_vals = gray_img[breast_mask]
-        if len(breast_vals) > 0:
-            dense_ratio = np.sum(breast_vals > 130) / float(len(breast_vals))
-        else:
-            dense_ratio = 0.35
+        # 1. Clean image: mask out burned-in annotations (hospital text, patient info, lead markers)
+        clean = clean_gray.copy()
+        clean[:int(h * 0.08), :] = 0          # Top hospital header
+        clean[int(h * 0.90):, :] = 0          # Bottom patient name and date
 
-        if dense_ratio < 0.20:
+        if side == "Right":
+            clean[:int(h * 0.25), :int(w * 0.32)] = 0  # Lead marker [R cc] / [R MLO]
+        else:
+            clean[:int(h * 0.25), int(w * 0.68):] = 0  # Lead marker [L cc] / [L MLO]
+
+        # 2. Extract true breast contour mask
+        thresh = cv2.threshold(clean, 20, 255, cv2.THRESH_BINARY)[1]
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_close)
+
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return {
+                "density_comp": "a",
+                "density_text": self.get_density_text("a"),
+                "side": side,
+                "birads": 1,
+                "mass": None,
+                "candidates_count": 0
+            }
+
+        breast_cnt = max(contours, key=cv2.contourArea)
+        breast_mask = np.zeros_like(clean)
+        cv2.drawContours(breast_mask, [breast_cnt], -1, 255, -1)
+
+        # Erode slightly (avoid skin-air boundary artifacts)
+        inner_mask = cv2.erode(breast_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+
+        # 3. Parenchyma density calculation
+        breast_vals = clean[inner_mask > 0]
+        if len(breast_vals) > 0:
+            dense_ratio = np.sum(breast_vals > 125) / float(len(breast_vals))
+        else:
+            dense_ratio = 0.08
+
+        if dense_ratio < 0.15:
             density_comp = "a"
-        elif dense_ratio < 0.45:
+        elif dense_ratio < 0.40:
             density_comp = "b"
-        elif dense_ratio < 0.70:
+        elif dense_ratio < 0.65:
             density_comp = "c"
         else:
             density_comp = "d"
 
         density_text = self.get_density_text(density_comp)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
-        tophat = cv2.morphologyEx(gray_img, cv2.MORPH_TOPHAT, kernel)
-        dense_regions = (tophat > 40) & breast_mask
+        # 4. Search for true focal masses
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))
+        tophat = cv2.morphologyEx(clean, cv2.MORPH_TOPHAT, kernel)
+        dense_regions = (tophat > 48) & (inner_mask > 0)
         contours, _ = cv2.findContours(dense_regions.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         candidates = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if 200 < area < 15000:
-                x, y, bw, bh = cv2.boundingRect(cnt)
-                is_upper = (y + bh/2) < (h * 0.5)
-                is_outer = (x + bw/2) > (w * 0.5) if side == "Right" else (x + bw/2) < (w * 0.5)
-                quadrant = "upper outer quadrant" if (is_upper and is_outer) else (
-                    "upper inner quadrant" if is_upper else (
-                        "lower outer quadrant" if is_outer else "lower inner quadrant"
-                    )
-                )
+            if 250 < area < 10000:
                 perimeter = cv2.arcLength(cnt, True)
                 circ = 4 * np.pi * (area / (perimeter * perimeter + 1e-5))
-                shape = "oval" if circ > 0.6 else "irregular"
-                margin = "partially indistinct" if circ < 0.7 else "circumscribed"
-                candidates.append({
-                    "box": (x, y, x + bw, y + bh),
-                    "area": area,
-                    "quadrant": quadrant,
-                    "shape": shape,
-                    "margin": margin,
-                    "side": side,
-                    "slot": slot_name
-                })
+                # In clinical radiology, a true mass is round/oval (compactness > 0.55).
+                # Fibrous strands and linear artifacts have circ < 0.45.
+                if circ > 0.55:
+                    x, y, bw, bh = cv2.boundingRect(cnt)
+                    is_upper = (y + bh/2) < (h * 0.5)
+                    is_outer = (x + bw/2) > (w * 0.5) if side == "Right" else (x + bw/2) < (w * 0.5)
+                    quadrant = "upper outer quadrant" if (is_upper and is_outer) else (
+                        "upper inner quadrant" if is_upper else (
+                            "lower outer quadrant" if is_outer else "lower inner quadrant"
+                        )
+                    )
+                    shape = "oval" if circ > 0.68 else "irregular"
+                    margin = "circumscribed" if circ > 0.72 else "partially indistinct"
+                    bx1 = int(x / scale) if scale != 1.0 else x
+                    by1 = int(y / scale) if scale != 1.0 else y
+                    bx2 = int((x + bw) / scale) if scale != 1.0 else (x + bw)
+                    by2 = int((y + bh) / scale) if scale != 1.0 else (y + bh)
+                    candidates.append({
+                        "box": (bx1, by1, bx2, by2),
+                        "area": area,
+                        "quadrant": quadrant,
+                        "shape": shape,
+                        "margin": margin,
+                        "side": side,
+                        "slot": slot_name
+                    })
 
         if candidates:
             candidates.sort(key=lambda c: c["area"], reverse=True)
