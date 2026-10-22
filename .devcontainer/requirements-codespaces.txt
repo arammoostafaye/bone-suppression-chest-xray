@@ -1,0 +1,15 @@
+# Dependencies for running the demo in GitHub Codespaces (CPU-only).
+#
+# torch is deliberately NOT listed here: devcontainer.json installs it from
+# https://download.pytorch.org/whl/cpu so the CUDA wheels (~2.5 GB) are skipped.
+# The TorchScript traces need torch >= 2.1.
+#
+# The root requirements.txt stays untouched because on the Hugging Face Space
+# torch/gradio/spaces are preinstalled by the ZeroGPU runtime.
+
+gradio==6.28.0
+spaces>=0.28
+huggingface_hub>=0.25
+opencv-python-headless>=4.8
+numpy>=1.24
+Pillow>=10.0

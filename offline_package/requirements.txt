@@ -1,0 +1,9 @@
+# Core PyTorch for CPU or CUDA (TorchScript >= 2.1 required)
+torch>=2.1.0
+torchvision>=0.16.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+pydicom>=2.4.0
+gradio>=4.0.0
+pyinstaller>=6.0.0
