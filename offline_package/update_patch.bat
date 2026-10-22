@@ -1,16 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Patch Updater (v2.8.0)
+title BoneSuppression AI - Multi-AI Patch Updater (v2.8.1)
 color 0f
 
-set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.0/BoneSuppressionAI-v2.8.0-Update-Only.zip"
-set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.8.0-Update-Only.zip"
+set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.1/BoneSuppressionAI-v2.8.1-Update-Only.zip"
+set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.8.1-Update-Only.zip"
 set "URL3=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/latest/download/BoneSuppressionAI-Update-Only.zip"
-set "OUT=%~dp0BoneSuppressionAI-v2.8.0-Update-Only.zip"
+set "OUT=%~dp0BoneSuppressionAI-v2.8.1-Update-Only.zip"
 
 echo ======================================================================
-echo   پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.0)
-echo   توسعه‌دهنده: آرام مصطفائی | موتور احراز هویت رمزنگاری‌شده AES پکس مدال
+echo   پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.1)
+echo   توسعه‌دهنده: آرام مصطفائی | دانلود موازی و نشست ماندگار ۱۲ ساعته پکس
 echo ======================================================================
 echo.
 echo  در حال دریافت پکیج سبک آپدیت (~280 مگابایت)...

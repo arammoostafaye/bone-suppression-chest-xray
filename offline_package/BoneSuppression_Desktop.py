@@ -135,7 +135,7 @@ DEFAULT_PASS_HASH = "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6
 HOSPITAL_TITLE = "بیمارستان بوعلی مریوان"
 NETWORK_TITLE = "شبکه بهداشت و درمان مریوان"
 DEVELOPER_NAME = "آرام مصطفائی"
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.8.1"
 APP_TITLE = f"پلتفرم تخصصی هوش مصنوعی رادیولوژی {HOSPITAL_TITLE} | {DEVELOPER_NAME} (نگارش v{APP_VERSION})"
 DEVELOPER_ROLE = "پرسنل واحد امور تصویربرداری بیمارستان بوعلی"
 DEVELOPER_PHONES = ["09356808002", "09188766949"]
@@ -1593,7 +1593,7 @@ class MedalPacsModal(tk.Toplevel):
     or direct serieslist/viewer links.
     Includes smart cache manager to clean temp storage and protect C: disk space.
     """
-    def __init__(self, parent_app):
+    def __init__(self, parent_app, pacs_client=None):
         super().__init__(parent_app)
         self.app = parent_app
         self.title("🌐 اتصال و دریافت مستقیم از پکس مدال بیمارستان بوعلی مریوان")
@@ -1604,10 +1604,15 @@ class MedalPacsModal(tk.Toplevel):
         self.grab_set()
 
         try:
-            # Resolve cache directory relative to EXE_DIR
-            cache_path = os.path.join(EXE_DIR, "pacs_temp_cache")
-            self.cache_mgr = PacsCacheManager(cache_path)
-            self.pacs_client = MedalPacsClient(self.cache_mgr)
+            # Shared persistent client across entire application runtime (12-hour session)
+            self.pacs_client = pacs_client or getattr(parent_app, "pacs_client", None)
+            if self.pacs_client is None:
+                cache_path = os.path.join(EXE_DIR, "pacs_temp_cache")
+                self.cache_mgr = PacsCacheManager(cache_path)
+                self.pacs_client = MedalPacsClient(self.cache_mgr, session_ttl_hours=12)
+                setattr(parent_app, "pacs_client", self.pacs_client)
+            else:
+                self.cache_mgr = self.pacs_client.cache_mgr
 
             self.target_modality = tk.StringVar(value="mammo")
             self.server_choice = tk.StringVar(value="http://192.168.11.201")
@@ -1881,7 +1886,11 @@ class MedalPacsModal(tk.Toplevel):
     def update_auth_ui(self):
         if self.pacs_client.is_authenticated():
             u = self.pacs_client.logged_in_user or "کاربر پکس"
-            self.lbl_auth_badge.config(text=f"🟢 نشست فعال ({u})", fg="#10b981", bg="#064e3b")
+            rem = self.pacs_client.get_remaining_session_hours()
+            self.lbl_auth_badge.config(
+                text=f"🟢 نشست فعال ({u} - {rem:.1f} ساعت اعتبار)",
+                fg="#10b981", bg="#064e3b"
+            )
             self.btn_login_modal.config(text="🔐 ورود مجدد", bg="#1e293b")
         else:
             self.lbl_auth_badge.config(text="⚪ ورود نکرده", fg="#f59e0b", bg="#1e293b")
@@ -1889,8 +1898,9 @@ class MedalPacsModal(tk.Toplevel):
 
     def open_login_dialog(self, auto_retry_link=None):
         def on_success(user):
+            self.pacs_client.save_session_to_disk()
             self.update_auth_ui()
-            self.log(f"نشست پرسنلی پکس برای کاربر {user} فعال گردید.")
+            self.log(f"نشست پرسنلی پکس برای کاربر {user} فعال و تا ۱۲ ساعت ذخیره گردید.")
             if auto_retry_link:
                 self.after(500, self.start_download_thread)
 
@@ -1921,7 +1931,7 @@ class MedalPacsModal(tk.Toplevel):
         # If PACS redirected to Login or requires staff authentication:
         if any(w in err for w in ["نیازمند ورود", "Login", "نشست", "Session", "احراز هویت"]):
             # Stale session
-            self.pacs_client.logged_in_user = None
+            self.pacs_client.clear_saved_session()
             self.update_auth_ui()
 
             ans = messagebox.askyesno("ورود پرسنلی به پکس مدال",
@@ -2033,6 +2043,11 @@ class BoneSuppressionApp(tk.Tk):
         self.auto_invert_var = tk.BooleanVar(value=True)
         self.slider_pos = tk.DoubleVar(value=0.5)
         self.sidebar_visible = True
+
+        # Hospital Medal PACS Engine (12-hour session persistence)
+        cache_path = os.path.join(EXE_DIR, "pacs_temp_cache")
+        self.pacs_cache_mgr = PacsCacheManager(cache_path)
+        self.pacs_client = MedalPacsClient(self.pacs_cache_mgr, session_ttl_hours=12)
 
         # Container hierarchy
         self.splash_container = tk.Frame(self, bg=C_CANVAS)
@@ -3423,7 +3438,7 @@ class BoneSuppressionApp(tk.Tk):
     # -------------------------------------------------------------------------
 
     def open_pacs_modal(self):
-        MedalPacsModal(self)
+        MedalPacsModal(self, pacs_client=self.pacs_client)
 
     def load_dicom_files_to_mammo(self, files, pname="", pid=""):
         if not files:

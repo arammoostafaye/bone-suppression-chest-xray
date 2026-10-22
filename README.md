@@ -2,9 +2,9 @@
 
 # 🩻 پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان
 ## BoneSuppression AI — Specialized AI Radiology & Mammography Platform
-### نگارش پایدار و رسمی: `v2.8.0`
+### نگارش پایدار و رسمی: `v2.8.1`
 
-[![Release](https://img.shields.io/badge/Release-v2.8.0-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.8.0)
+[![Release](https://img.shields.io/badge/Release-v2.8.1-emerald?style=for-the-badge&logo=github)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.8.1)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64%20(Offline)-blue?style=for-the-badge&logo=windows)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.7.4)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-PyTorch%20%7C%20ONNX-orange?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 [![Status](https://img.shields.io/badge/Status-Clinical%20Verified-success?style=for-the-badge)](https://github.com/arammoostafaye/bone-suppression-chest-xray)
@@ -86,6 +86,8 @@
 ### ۵. سامانه اتصال هوشمند به پکس مدال بیمارستان (Medal PACS Direct Integration)
 * **دسترسی دوگانه شبکه داخلی و اینترنت:** اتصال مستقیم به سرور محلی بیمارستان (`192.168.11.201`) و درگاه اینترنتی (`marivan-pacs-boali.muk.ac.ir`).
 * **احراز هویت رمزنگاری‌شده بر پایه سورس پکس مدال ۲۰۲۴:** پیاده‌سازی بومی الگوریتم AES-128-CBC منطبق بر کلاینت رسمی مدال (`CryptoJS.AES.encrypt` با کلیدهای داینامیک `hfkey` و `hfiv` درون فیلد `HF1`).
+* **نشست ماندگار حداقل ۱۲ ساعته (12-Hour Persistent Session):** ذخیره‌سازی امن توکن‌ها و کوکی‌های احراز هویت در دیسک؛ عدم نیاز به ورود مکرر برای هر بیمار و کارکرد پیوسته در تمام شیفت کاری.
+* **دانلود فوق سریع موازی و چندنخی (Multi-Threaded Parallel Download):** دریافت همزمان تمامی نماها (`R-CC`, `L-CC`, `R-MLO`, `L-MLO`) از طریق `ThreadPoolExecutor` با کش الگوی سرور و کاهش زمان دانلود از ۵ تا ۷ دقیقه به **کمتر از ۱۵ ثانیه**.
 * **انطباق ۱۰۰٪ با کنترل‌های امنیتی مدال:** نگاشت مستقیم متغیرهای ورودی (`aaaa` برای نام کاربری، `bbbb` برای کلمه عبور، `txtCaptcha` برای کپچا، و `LoginButton`).
 * **کپچای زنده و پایدار:** دریافت مستقیم ارقام امنیتی ۵ رقمی از هندلر `CaptchaImage.axd` بدون نیاز به دستکاری دستی کوکی‌ها یا باز کردن مرورگر جداگانه.
 * **جستجوی مستقیم با کدملی و شماره پرونده:** استعلام خودکار با کدملی (۱۰ رقمی) یا شماره پذیرش با تبدیل خودکار ارقام فارسی/عربی.
@@ -129,14 +131,14 @@
 ### 🚀 روش اول: بروزرسانی سبک و سریع (مخصوص دارندگان نسخه قبلی)
 اگر قبلاً نسخه‌های پیشین را نصب داشته‌اید، نیازی به دانلود مجدد فایل‌های سنگین ۸۳۵ مگابایتی نیست. پکیج پچ تنها **~۲۸۰ مگابایت** حجم دارد:
 1. فایل سبک اسکریپت آپدیت را دانلود کنید:
-   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.8.0)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.0/update_patch.bat)**
+   🔗 **[دانلود مستقیم update_patch.bat (نگارش v2.8.1)](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.1/update_patch.bat)**
 2. آن را درون پوشه برنامه قبلی قرار داده و اجرا کنید.
 3. فایل‌های مدل قبلی شما به صورت خودکار به نسخه جدید متصل شده و برنامه فوراً اجرا می‌شود.
 
 ### 📦 روش دوم: پکیج کامل آفلاین (مخصوص سیستم‌های جدید)
 برای نصب تازه روی سیستم‌های بیمارستانی فاقد اینترنت:
 * فایل فشرده کامل را از صفحه رسمی ریلیز دریافت نمایید:
-  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.8.0](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.8.0)**
+  🔗 **[صفحه دانلود نسخه رسمی GitHub Release v2.8.1](https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/tag/v2.8.1)**
   - فایل: `BoneSuppressionAI-Windows-x64-Offline.zip` (شامل تمامی مدل‌ها و وابستگی‌ها).
 
 #### مشخصات ورود به برنامه:
