@@ -1138,183 +1138,70 @@ class MedalPacsClient:
         if progress_callback:
             progress_callback(42, f"بیمار شناسایی شد: {pname_display} (شناسه: {pid_display}) - {len(series_items)} سری...")
 
-        # Step 3: High-Speed Parallel Image Acquisition Engine via SendToRIS.aspx
+        # Step 3: Direct High-Speed DICOM Package Download Engine (Download.aspx)
+        # Dedicated 100% DICOM pipeline: No slow image-by-image JPGs!
         extract_folder = os.path.join(self.cache_mgr.cache_dir, f"study_{pid or study_key}")
         os.makedirs(extract_folder, exist_ok=True)
         downloaded_files = []
 
-        mammo_view_names = ["R-CC", "L-CC", "R-MLO", "L-MLO"]
-        is_mammo = (modality.upper() == "MG" or len(series_items) == 4)
-        total_images = sum(s["count"] for s in series_items)
+        if progress_callback:
+            progress_callback(50, f"درخواست مستقیم پکیج کامل دایکام ({pname_display})...")
 
-        # Build list of all image tasks across all series
-        tasks = []
-        img_counter = 0
-        for s_idx, ser_info in enumerate(series_items):
-            ser_key = ser_info["key"]
-            img_count = ser_info["count"]
-            for f_idx in range(1, img_count + 1):
-                img_counter += 1
-                if is_mammo and s_idx < len(mammo_view_names):
-                    vname = mammo_view_names[s_idx]
-                    save_name = f"{s_idx + 1:02d}_{vname}.jpg"
-                else:
-                    save_name = f"series_{ser_key}_img_{f_idx}.jpg"
-                save_path = os.path.join(extract_folder, save_name)
-                tasks.append({
-                    "task_idx": img_counter,
-                    "ser_key": ser_key,
-                    "img_idx": f_idx,
-                    "save_path": save_path,
-                    "save_name": save_name
-                })
+        candidate_dl_urls = [
+            f"{base}/MedalWeb/Download.aspx?SK={hash_key}&PID={pid}&mode={mode}" if pid else None,
+            f"{base}/MedalWeb/Download.aspx?SK={study_key}&PID={pid}&mode={mode}" if pid else None,
+            f"{base}/MedalWeb/Download.aspx?SK={hash_key}&mode={mode}",
+            f"{base}/MedalWeb/Download.aspx?SK={study_key}&mode={mode}",
+            f"{base}/MedalWeb/Download.aspx?SK={hash_key}",
+        ]
+        candidate_dl_urls = [u for u in candidate_dl_urls if u]
 
-        def build_candidate_urls(ser_key, img_idx):
-            cands = []
-            # 1. Winning cached template if already established (checked first!)
-            if self.preferred_send_template:
-                cands.append(self.preferred_send_template.format(base=base, ser=ser_key, img=img_idx))
+        safe_pid_name = re.sub(r'[^A-Za-z0-9_-]', '_', str(pid or study_key))
+        zip_save_path = os.path.join(self.cache_mgr.cache_dir, f"study_{safe_pid_name}.zip")
 
-            # 2. Key variants in order of probability
-            variants = [
-                ("hash_plus", f"{base}/MedalWeb/SendToRIS.aspx?SK={hash_key.replace('+', '%2B')}&Ser={ser_key}&Img={img_idx}",
-                 f"{base}/MedalWeb/SendToRIS.aspx?SK={hash_key.replace('+', '%2B')}&Ser={{ser}}&Img={{img}}"),
-                ("study_plus", f"{base}/MedalWeb/SendToRIS.aspx?SK={study_key.replace('+', '%2B')}&Ser={ser_key}&Img={img_idx}",
-                 f"{base}/MedalWeb/SendToRIS.aspx?SK={study_key.replace('+', '%2B')}&Ser={{ser}}&Img={{img}}"),
-                ("hash_raw", f"{base}/MedalWeb/SendToRIS.aspx?SK={hash_key}&Ser={ser_key}&Img={img_idx}",
-                 f"{base}/MedalWeb/SendToRIS.aspx?SK={hash_key}&Ser={{ser}}&Img={{img}}"),
-                ("study_raw", f"{base}/MedalWeb/SendToRIS.aspx?SK={study_key}&Ser={ser_key}&Img={img_idx}",
-                 f"{base}/MedalWeb/SendToRIS.aspx?SK={study_key}&Ser={{ser}}&Img={{img}}"),
-                ("hash_quote", f"{base}/MedalWeb/SendToRIS.aspx?SK={urllib.parse.quote(hash_key, safe='')}&Ser={ser_key}&Img={img_idx}",
-                 f"{base}/MedalWeb/SendToRIS.aspx?SK={urllib.parse.quote(hash_key, safe='')}&Ser={{ser}}&Img={{img}}"),
-            ]
-            for v_name, full_u, t_str in variants:
-                if full_u not in [c if isinstance(c, str) else c[1] for c in cands]:
-                    cands.append((v_name, full_u, t_str))
-            return cands
+        for dl_url in candidate_dl_urls:
+            try:
+                dl_headers = {"Referer": final_url, "Accept": "application/zip,*/*"}
+                resp_url, resp_bytes = self.fetch_url(dl_url, headers=dl_headers, timeout=30)
 
-        def fetch_image_task(task, probe=False):
-            save_path = task["save_path"]
-            ser_key = task["ser_key"]
-            img_idx = task["img_idx"]
-
-            # If already downloaded and valid, reuse
-            if os.path.exists(save_path) and os.path.getsize(save_path) > 1024:
-                return task, True
-
-            candidates = build_candidate_urls(ser_key, img_idx)
-            req_headers = {
-                "Referer": final_url,
-                "Accept": "image/jpeg,image/webp,image/*,*/*",
-                "Connection": "keep-alive"
-            }
-
-            for item in candidates:
-                if isinstance(item, tuple):
-                    v_name, target_url, tmpl = item
-                else:
-                    target_url = item
-                    tmpl = None
-
-                try:
-                    # Tight 7s timeout on probe to avoid hanging on failing endpoints
-                    timeout_sec = 7 if probe else 15
-                    r_url, img_bytes = self.fetch_url(target_url, headers=req_headers, timeout=timeout_sec)
-                    if len(img_bytes) > 128 and (img_bytes.startswith(b"\xff\xd8\xff") or img_bytes.startswith(b"\x89PNG") or img_bytes.startswith(b"PK\x03\x04")):
-                        with open(save_path, "wb") as out_f:
-                            out_f.write(img_bytes)
-                        # Remember winning template for zero-latency subsequent downloads!
-                        if tmpl and not self.preferred_send_template:
-                            self.preferred_send_template = tmpl
-                            self.save_session_to_disk()
-                        return task, True
-                except Exception:
-                    continue
-            return task, False
-
-        # Phase 1: Fast Probe on Image 1 to discover and lock the winning URL template
-        if tasks:
-            first_task = tasks[0]
-            if progress_callback:
-                progress_callback(46, f"بررسی مسیر پرسرعت نماها ({first_task['save_name']})...")
-            _, ok = fetch_image_task(first_task, probe=True)
-            if ok:
-                downloaded_files.append(first_task["save_path"])
-                if progress_callback:
-                    progress_callback(52, f"نمای {first_task['save_name']} دریافت شد.")
-
-        # Phase 2: Concurrent Multi-Threaded Parallel Download for remaining images
-        remaining_tasks = [t for t in tasks if t["save_path"] not in downloaded_files]
-        if remaining_tasks:
-            max_workers = min(4, len(remaining_tasks))
-            done_count = len(downloaded_files)
-            if progress_callback:
-                progress_callback(55, f"دانلود موازی و پرسرعت {len(remaining_tasks)} نمای باقیمانده...")
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_map = {executor.submit(fetch_image_task, task, False): task for task in remaining_tasks}
-                for future in concurrent.futures.as_completed(future_map):
-                    task, ok = future.result()
-                    if ok:
-                        downloaded_files.append(task["save_path"])
-                    done_count += 1
-                    pct = int(55 + (done_count / max(1, total_images)) * 40)
-                    if progress_callback:
-                        progress_callback(pct, f"دریافت نمای {task['save_name']} ({done_count}/{total_images})...")
-
-        # =========================================================================
-        # ENGINE 2 (FALLBACK): If SendToRIS was not available, try Download.aspx (ZIP)
-        # =========================================================================
-        if not downloaded_files:
-            if progress_callback:
-                progress_callback(70, "تلاش برای دریافت پکیج فشرده دایکام (Download.aspx)...")
-            candidate_dl_urls = [
-                f"{base}/MedalWeb/Download.aspx?SK={hash_key}&PID={pid}&mode={mode}" if pid else None,
-                f"{base}/MedalWeb/Download.aspx?SK={study_key}&PID={pid}&mode={mode}" if pid else None,
-                f"{base}/MedalWeb/Download.aspx?SK={hash_key}&mode={mode}",
-                f"{base}/MedalWeb/Download.aspx?SK={study_key}&mode={mode}",
-                f"{base}/MedalWeb/Download.aspx?SK={hash_key}",
-            ]
-            candidate_dl_urls = [u for u in candidate_dl_urls if u]
-
-            zip_save_path = os.path.join(self.cache_mgr.cache_dir, f"study_{pid or study_key}.zip")
-
-            for dl_url in candidate_dl_urls:
-                try:
-                    dl_headers = {"Referer": final_url, "Accept": "application/zip,*/*"}
-                    resp_url, resp_bytes = self.fetch_url(dl_url, headers=dl_headers, timeout=30)
-
-                    if resp_bytes.startswith(b"PK\x03\x04"):
-                        with open(zip_save_path, "wb") as out_f:
-                            out_f.write(resp_bytes)
-                        with zipfile.ZipFile(zip_save_path, "r") as zf:
-                            zf.extractall(extract_folder)
+                if resp_bytes.startswith(b"PK\x03\x04"):
+                    with open(zip_save_path, "wb") as out_f:
+                        out_f.write(resp_bytes)
+                    downloaded_files = self._extract_zip_safely(zip_save_path, extract_folder, progress_callback)
+                    if downloaded_files:
                         break
 
-                    resp_text = resp_bytes.decode("utf-8", errors="replace").strip()
-                    zm = re.search(r"([A-Za-z0-9_\-]+\.zip)", resp_text, re.I)
-                    if zm:
-                        actual_zip_url = f"{base}/MedalWeb/temp/{zm.group(1)}"
-                        self._stream_download(actual_zip_url, zip_save_path, final_url, progress_callback)
-                        with zipfile.ZipFile(zip_save_path, "r") as zf:
-                            zf.extractall(extract_folder)
+                resp_text = resp_bytes.decode("utf-8", errors="replace").strip()
+                zm = re.search(r"([A-Za-z0-9_\-]+\.zip)", resp_text, re.I)
+                if zm:
+                    actual_zip_url = f"{base}/MedalWeb/temp/{zm.group(1)}"
+                    self._stream_download(actual_zip_url, zip_save_path, final_url, progress_callback)
+                    downloaded_files = self._extract_zip_safely(zip_save_path, extract_folder, progress_callback)
+                    if downloaded_files:
                         break
-                except Exception:
-                    continue
+            except Exception as e:
+                print(f"DICOM download/extract exception: {e}")
+                continue
 
-            # Catalog extracted files
+        # Fallback catalog if files were already extracted
+        if not downloaded_files and os.path.exists(extract_folder):
             for root, _, files in os.walk(extract_folder):
                 for f in sorted(files):
-                    if f.lower().endswith((".dcm", ".dicom", ".ima", ".jpg", ".jpeg", ".png")) or (len(f) <= 8 and "." not in f):
-                        downloaded_files.append(os.path.join(root, f))
+                    fp = os.path.join(root, f)
+                    if not os.path.isfile(fp) or os.path.getsize(fp) < 256:
+                        continue
+                    fl = f.lower()
+                    if fl in ["dicomdir", "thumbs.db", "desktop.ini"] or fl.endswith((".xml", ".txt", ".json", ".zip", ".html", ".exe", ".dll", ".log", ".bat")):
+                        continue
+                    downloaded_files.append(fp)
 
         if not downloaded_files:
-            raise RuntimeError(f"کلیشه‌های بیمار از سرور پکس دریافت نشدند.\nسرور: {base}\nشناسه: {pid_display}")
+            raise RuntimeError(f"پکیج دایکام بیمار از سرور پکس دریافت نشد.\nسرور: {base}\nشناسه: {pid_display}")
 
         downloaded_files = sorted(list(set(downloaded_files)))
 
         if progress_callback:
-            progress_callback(100, f"✓ دریافت موفقیت‌آمیز {len(downloaded_files)} کلیشه برای {pname_display}.")
+            progress_callback(100, f"✓ دریافت موفقیت‌آمیز {len(downloaded_files)} فایل دایکام برای {pname_display}.")
 
         return {
             "pid": pid_display,
@@ -1325,6 +1212,52 @@ class MedalPacsClient:
             "dicom_files": downloaded_files,
             "count": len(downloaded_files)
         }
+
+    def _extract_zip_safely(self, zip_path, extract_folder, progress_callback=None):
+        """Safely extracts zip contents sanitizing paths for Windows and catalogs medical files."""
+        downloaded = []
+        if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 100:
+            return downloaded
+
+        os.makedirs(extract_folder, exist_ok=True)
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                members = zf.infolist()
+                total_m = len(members)
+                if progress_callback:
+                    progress_callback(96, f"در حال استخراج {total_m} کلیشه از پکیج پکس...")
+
+                for member in members:
+                    raw_name = member.filename
+                    # Clean and sanitize path parts
+                    clean_parts = []
+                    for part in raw_name.replace("\\", "/").split("/"):
+                        clean_part = re.sub(r'[:*?"<>|]', '_', part).strip()
+                        if clean_part:
+                            clean_parts.append(clean_part)
+                    if not clean_parts:
+                        continue
+                    dest_path = os.path.join(extract_folder, *clean_parts)
+                    if member.is_dir() or raw_name.endswith("/"):
+                        os.makedirs(dest_path, exist_ok=True)
+                    else:
+                        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                        with zf.open(member) as src, open(dest_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+        except Exception as e:
+            print(f"Extraction error: {e}")
+
+        for root, _, files in os.walk(extract_folder):
+            for f in sorted(files):
+                fp = os.path.join(root, f)
+                if not os.path.isfile(fp) or os.path.getsize(fp) < 256:
+                    continue
+                fl = f.lower()
+                if fl in ["dicomdir", "thumbs.db", "desktop.ini"] or fl.endswith((".xml", ".txt", ".json", ".zip", ".html", ".exe", ".dll", ".log", ".bat")):
+                    continue
+                downloaded.append(fp)
+
+        return downloaded
 
     def _stream_download(self, url, save_path, referer, progress_callback=None):
         """Stream downloads a file with progress updates."""
