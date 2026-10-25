@@ -187,7 +187,7 @@ DEFAULT_PASS_HASH = "912863a494a953280178cd8812895062696e4493e3c764f9e58c49bfaa6
 HOSPITAL_TITLE = "بیمارستان بوعلی مریوان"
 NETWORK_TITLE = "شبکه بهداشت و درمان مریوان"
 DEVELOPER_NAME = "آرام مصطفائی"
-APP_VERSION = "2.8.3"
+APP_VERSION = "2.8.4"
 APP_TITLE = f"پلتفرم تخصصی هوش مصنوعی رادیولوژی {HOSPITAL_TITLE} | {DEVELOPER_NAME} (نگارش v{APP_VERSION})"
 DEVELOPER_ROLE = "پرسنل واحد امور تصویربرداری بیمارستان بوعلی"
 DEVELOPER_PHONES = ["09356808002", "09188766949"]
@@ -333,6 +333,25 @@ class ClinicalReportModal(tk.Toplevel):
                               command=self.regenerate_reports)
         btn_regen.pack(side=tk.RIGHT, padx=4)
 
+        # Radiologist BI-RADS Override Row
+        self.birads_override_frame = tk.Frame(control_frame, bg="#0d1424")
+        self.birads_override_frame.pack(fill=tk.X, pady=(4, 0))
+
+        curr_b = self.app_state.get("mammo_summary", {}).get("overall_birads") or self.app_state.get("mammo", {}).get("birads", 1)
+        self.selected_birads = tk.IntVar(value=curr_b)
+
+        tk.Label(self.birads_override_frame, text="رده‌بندی بالینی BI-RADS (تایید یا اصلاح توسط رادیولوژیست):",
+                 font=("Segoe UI", 8, "bold"), fg="#f472b6", bg="#0d1424").pack(side=tk.LEFT, padx=(6, 4))
+        for b_num in (1, 2, 3, 4, 5):
+            rb_b = tk.Radiobutton(self.birads_override_frame, text=f"BI-RADS {b_num}", variable=self.selected_birads, value=b_num,
+                                  font=("Segoe UI", 8), bg="#0d1424", fg="#f8fafc", selectcolor="#090d16",
+                                  activebackground="#0d1424", activeforeground="#38bdf8",
+                                  command=self.regenerate_reports)
+            rb_b.pack(side=tk.LEFT, padx=4)
+
+        if self.report_type.get() != "mammo":
+            self.birads_override_frame.pack_forget()
+
         # 3. Language Segmented Tabs
         tab_bar = tk.Frame(self, bg="#090d16")
         tab_bar.pack(fill=tk.X, padx=14, pady=(6, 0))
@@ -391,6 +410,11 @@ class ClinicalReportModal(tk.Toplevel):
         self.status_lbl.pack(side=tk.RIGHT, padx=14)
 
     def on_type_changed(self):
+        if hasattr(self, "birads_override_frame"):
+            if self.report_type.get() == "mammo":
+                self.birads_override_frame.pack(fill=tk.X, pady=(4, 0))
+            else:
+                self.birads_override_frame.pack_forget()
         self.regenerate_reports()
 
     def switch_lang_tab(self, lang):
@@ -584,7 +608,16 @@ class ClinicalReportModal(tk.Toplevel):
         summary = self.app_state.get("mammo_summary") or {}
 
         density_comp = summary.get("overall_comp") or mammo.get("density_comp", "b")
-        birads = summary.get("overall_birads") or mammo.get("birads", 1)
+        if hasattr(self, "selected_birads"):
+            birads = self.selected_birads.get()
+        else:
+            birads = summary.get("overall_birads") or mammo.get("birads", 1)
+
+        cad_score = summary.get("cad_score") or mammo.get("cad_score", 1)
+        cad_risk_en = summary.get("cad_risk_en") or mammo.get("cad_risk_en", "Very Low Risk / Normal Triage")
+        cad_risk_fa = summary.get("cad_risk_fa") or mammo.get("cad_risk_fa", "ریسک بسیار پایین / تریاژ بافت نرمال")
+        abnormality_pct = summary.get("abnormality_pct") or mammo.get("abnormality_pct", 0.0)
+
         m_obj = mammo.get("mass") or {}
         r_mass = summary.get("right_mass") or (m_obj if m_obj.get("side") == "Right" else None)
         l_mass = summary.get("left_mass") or (m_obj if m_obj.get("side") == "Left" else None)
@@ -689,7 +722,12 @@ class ClinicalReportModal(tk.Toplevel):
             f"- Parenchymal Density: {d_data['en_desc']}",
             f"- Diagnostic Impact: {d_data['en_sens']}",
             "",
-            "3. DETAILED ANATOMICAL FINDINGS:",
+            "3. CADe / CADx DECISION SUPPORT & RISK QUANTIFICATION (CONCURRENT-READER AID):",
+            f"- AI Screening Triage Score: {cad_score} / 10 ({cad_risk_en})",
+            f"- Maximum Abnormality Likelihood Index: {abnormality_pct}%",
+            "- Decision Support Role: CAD assistance for lesion localization and triage (ScreenPoint/ProFound AI paradigm). Not an autonomous diagnosis. Final diagnostic synthesis and formal report completion verified by attending radiologist.",
+            "",
+            "4. DETAILED ANATOMICAL FINDINGS:",
             "A. Bilateral Symmetry & Parenchymal Cone:",
             "- Symmetrical bilateral fibroglandular parenchyma distributed without evidence of focal architectural distortion, parenchymal tethering, or developing asymmetry between corresponding projections.",
             "",
@@ -737,7 +775,7 @@ class ClinicalReportModal(tk.Toplevel):
             "- Bilateral skin thickness is uniform and within normal limits (< 2.0 mm).",
             "- Both nipple-areolar complexes appear symmetrical without retraction, tethering, or retroareolar distortion.",
             "",
-            "4. IMPRESSION & SUMMARY:",
+            "5. IMPRESSION & SUMMARY:",
             "1. Bilateral screening digital mammogram (FFDM).",
             f"2. {d_data['en_desc']}",
             "3. " + ("Dominant focal mass identified as detailed above; targeted ultrasound advised." if (r_mass or l_mass) else "No mammographic evidence of dominant mass, architectural distortion, or suspicious microcalcifications.")
@@ -747,7 +785,7 @@ class ClinicalReportModal(tk.Toplevel):
 
         lines_en.extend([
             "",
-            "5. FINAL BI-RADS ASSESSMENT & RECOMMENDATION:",
+            "6. FINAL BI-RADS ASSESSMENT & RECOMMENDATION:",
             f"BI-RADS CATEGORY: {birads} ({b_data['en_title']})",
             f"Recommendation: {b_data['en_rec']}",
             "",
@@ -777,7 +815,12 @@ class ClinicalReportModal(tk.Toplevel):
             f"• رده دانسیته بافتی: {d_data['fa_desc']}",
             f"• اثر پوشانندگی بر حساسیت تشخیصی: {d_data['fa_sens']}",
             "",
-            "۳. ارزیابی تشریحی و یافته‌های موضعی (Detailed Findings):",
+            "۳. سامانه دستیار هوشمند کشف و تریاژ ضایعه (CADe / CADx Decision Support):",
+            f"• نمره تریاژ غربالگری پرونده (Screening Triage Score): {cad_score} از ۱۰ ({cad_risk_fa})",
+            f"• شاخص احتمال ناهنجاری (Abnormality Likelihood Index): {abnormality_pct} درصد",
+            "• یادداشت بالینی: خروجی هوش مصنوعی به عنوان دستیار خواننده دوم (Second Reader) و کمک‌یار غربالگری ارائه شده است؛ گزارش نهایی با بررسی، ویرایش و تایید پزشک متخصص رادیولوژی رسمیت می‌یابد.",
+            "",
+            "۴. ارزیابی تشریحی و یافته‌های موضعی (Detailed Findings):",
             "الف) تقارن مخروط فیبروگلاندولار:",
             "• توزیع بافت فیبروگلاندولار در هر دو پستان کاملاً متقارن بوده و شواهدی از عدم تقارن کانونی (Focal Asymmetry) یا اعوجاج ساختاری (Architectural Distortion) مشهود نیست.",
             "",
@@ -825,7 +868,7 @@ class ClinicalReportModal(tk.Toplevel):
             "• ضخامت پوست در هر دو پستان در محدوده طبیعی (کمتر از ۲ میلی‌متر) بوده و فاقد کشیدگی (Retraction) یا ادم است.",
             "• کمپلکس هاله و نوک پستان‌ها متقارن بوده و فاقد فرورفتگی یا انحراف رتروآرئولار می‌باشند.",
             "",
-            "۴. خلاصه یافته‌ها و جمع‌بندی نهایی (Impression):",
+            "۵. خلاصه یافته‌ها و جمع‌بندی نهایی (Impression):",
             "۱. ماموگرافی غربالگری دیجیتال دوطرفه (FFDM).",
             f"۲. {d_data['fa_desc']}",
             "۳. " + ("وجود کانون فضاگیر بر اساس جزئیات فوق؛ انجام سونوگرافی متمرکز پیشنهاد می‌شود." if (r_mass or l_mass) else "عدم وجود توده فضاگیر غالب، اعوجاج بافتی یا میکروکلسیفیکاسیون پاتولوژیک.")
@@ -835,7 +878,7 @@ class ClinicalReportModal(tk.Toplevel):
 
         lines_fa.extend([
             "",
-            "۵. رده‌بندی بالینی بای‌ردز و توصیه‌ها (BI-RADS Assessment & Recommendation):",
+            "۶. رده‌بندی بالینی بای‌ردز و توصیه‌ها (BI-RADS Assessment & Recommendation):",
             f"• رده‌بندی بالینی: گرید {birads} - {b_data['fa_title']}",
             f"• توصیه بالینی: {b_data['fa_rec']}",
             "",
@@ -3960,6 +4003,53 @@ class BoneSuppressionApp(tk.Tk):
             else:
                 overall_birads = 1
 
+            # Calculate CAD Screening Triage Score (1 to 10) & Abnormality Index (Transpara/ProFound AI Standard)
+            all_p_mals = [v["analysis"].get("p_malignant", 0.0) for v in loaded_views.values() if v.get("analysis")]
+            max_p_mal = max(all_p_mals, default=0.0)
+
+            if max_p_mal < 0.01:
+                cad_score = 1
+                cad_risk_en = "Very Low Risk / Normal Triage"
+                cad_risk_fa = "ریسک بسیار پایین / تریاژ بافت نرمال"
+            elif max_p_mal < 0.03:
+                cad_score = 2
+                cad_risk_en = "Low Risk / Likely Benign"
+                cad_risk_fa = "ریسک پایین / احتمالاً خوش‌خیم"
+            elif max_p_mal < 0.06:
+                cad_score = 3
+                cad_risk_en = "Low-Intermediate Risk"
+                cad_risk_fa = "ریسک پایین تا متوسط"
+            elif max_p_mal < 0.12:
+                cad_score = 4
+                cad_risk_en = "Intermediate Risk"
+                cad_risk_fa = "ریسک متوسط"
+            elif max_p_mal < 0.20:
+                cad_score = 5
+                cad_risk_en = "Intermediate-Elevated Risk"
+                cad_risk_fa = "ریسک متوسط متمایل به بالا"
+            elif max_p_mal < 0.35:
+                cad_score = 6
+                cad_risk_en = "Elevated Risk / Detailed Review"
+                cad_risk_fa = "ریسک بالا / نیازمند ارزیابی دقیق"
+            elif max_p_mal < 0.50:
+                cad_score = 7
+                cad_risk_en = "High Risk / Borderline Suspicious"
+                cad_risk_fa = "ریسک بالا / مشکوک مرزی"
+            elif max_p_mal < 0.70:
+                cad_score = 8
+                cad_risk_en = "High Suspicion / CAD Marked"
+                cad_risk_fa = "مشکوک / نشانه‌گذاری‌شده توسط CAD"
+            elif max_p_mal < 0.85:
+                cad_score = 9
+                cad_risk_en = "Very High Suspicion"
+                cad_risk_fa = "بسیار مشکوک"
+            else:
+                cad_score = 10
+                cad_risk_en = "Extremely High Suspicion"
+                cad_risk_fa = "شدیداً مشکوک به ضایعه بدخیم"
+
+            abnormality_pct = round(max_p_mal * 100, 1)
+
             self.mammo_4view_summary = {
                 "overall_comp": overall_comp,
                 "overall_birads": overall_birads,
@@ -3967,7 +4057,12 @@ class BoneSuppressionApp(tk.Tk):
                 "right_mass": r_confirmed_mass,
                 "left_mass": l_confirmed_mass,
                 "right_masses_count": len(right_masses),
-                "left_masses_count": len(left_masses)
+                "left_masses_count": len(left_masses),
+                "cad_score": cad_score,
+                "cad_risk_en": cad_risk_en,
+                "cad_risk_fa": cad_risk_fa,
+                "abnormality_pct": abnormality_pct,
+                "max_p_mal": max_p_mal
             }
 
             self.mammo_results = {
@@ -3977,7 +4072,12 @@ class BoneSuppressionApp(tk.Tk):
                 "mass": r_confirmed_mass or l_confirmed_mass,
                 "right_mass": r_confirmed_mass,
                 "left_mass": l_confirmed_mass,
-                "summary": self.mammo_4view_summary
+                "summary": self.mammo_4view_summary,
+                "cad_score": cad_score,
+                "cad_risk_en": cad_risk_en,
+                "cad_risk_fa": cad_risk_fa,
+                "abnormality_pct": abnormality_pct,
+                "max_p_mal": max_p_mal
             }
 
             self.mammo_findings = []
@@ -4003,6 +4103,14 @@ class BoneSuppressionApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("خطا", f"خطا در پردازش ماموگرافی:\n{traceback.format_exc()}")
             self.status_label.config(text="خطا در ماژول ماموگرافی", fg=C_RED)
+
+    def override_mammo_birads(self, val):
+        if self.mammo_results:
+            self.mammo_results["birads"] = val
+            if self.mammo_4view_summary:
+                self.mammo_4view_summary["overall_birads"] = val
+            self.status_label.config(text=f"✓ رده‌بندی BI-RADS توسط رادیولوژیست به {val} تغییر یافت", fg=C_CYAN)
+            self.refresh_sidebar_ui()
 
     def analyze_mammogram(self, gray_img, slot_name=None):
         orig_h, orig_w = gray_img.shape
@@ -4324,14 +4432,32 @@ class BoneSuppressionApp(tk.Tk):
         birads = res.get("birads", 1)
         b_col = "#10b981" if birads <= 2 else ("#f59e0b" if birads == 3 else "#ef4444")
 
-        # BI-RADS Badge Card
+        # 1. CAD Decision Support & Risk Triage Card (Transpara / ProFound AI Standard)
+        cad_score = res.get("cad_score", 1)
+        abnormality_pct = res.get("abnormality_pct", 0.0)
+        cad_risk_fa = res.get("cad_risk_fa", "ریسک بسیار پایین / تریاژ بافت نرمال")
+        cad_col = "#10b981" if cad_score <= 2 else ("#f59e0b" if cad_score <= 5 else "#ef4444")
+
+        cad_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=cad_col, padx=8, pady=6)
+        cad_card.pack(fill=tk.X, pady=3)
+
+        c_head = tk.Frame(cad_card, bg="#0f172a")
+        c_head.pack(fill=tk.X)
+        tk.Label(c_head, text=f"🎯 شاخص غربالگری CAD: {cad_score} / ۱۰", font=("Segoe UI", 9, "bold"), fg=cad_col, bg="#0f172a").pack(side=tk.LEFT)
+        tk.Label(c_head, text=f"احتمال ناهنجاری: {abnormality_pct}%", font=("Segoe UI", 8, "bold"), fg=C_CYAN, bg="#0f172a").pack(side=tk.RIGHT)
+
+        tk.Label(cad_card, text=f"وضعیت تریاژ: {cad_risk_fa}", font=("Segoe UI", 8, "bold"), fg=C_TEXT_LIGHT, bg="#0f172a").pack(anchor=tk.W, pady=(2, 0))
+        tk.Label(cad_card, text="• نقش هوش مصنوعی: دستیار خواننده دوم (CADe/CADx)؛ تصمیم و گزارش نهایی با رادیولوژیست است.",
+                 font=("Segoe UI", 7), fg=C_TEXT_MUTED, bg="#0f172a", wraplength=280, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
+
+        # 2. BI-RADS Badge Card with Radiologist Override Buttons
         b_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=b_col, padx=8, pady=6)
         b_card.pack(fill=tk.X, pady=3)
 
         b_head = tk.Frame(b_card, bg="#0f172a")
         b_head.pack(fill=tk.X)
-        tk.Label(b_head, text=f"رده‌بندی BI-RADS: {birads}", font=("Segoe UI", 10, "bold"), fg=b_col, bg="#0f172a").pack(side=tk.LEFT)
-        
+        tk.Label(b_head, text=f"رده‌بندی بالینی BI-RADS: {birads}", font=("Segoe UI", 10, "bold"), fg=b_col, bg="#0f172a").pack(side=tk.LEFT)
+
         b_desc = {
             1: "منفی / کاملاً نرمال (Negative)",
             2: "یافته خوش‌خیم (Benign Finding)",
@@ -4340,6 +4466,18 @@ class BoneSuppressionApp(tk.Tk):
             5: "شدیداً مطرح‌کننده بدخیمی (Highly Suggestive)"
         }
         tk.Label(b_card, text=b_desc.get(birads, ""), font=("Segoe UI", 8), fg=C_TEXT_LIGHT, bg="#0f172a").pack(anchor=tk.W, pady=(2, 0))
+
+        # Quick Radiologist Override Row
+        ovr_frame = tk.Frame(b_card, bg="#0f172a")
+        ovr_frame.pack(fill=tk.X, pady=(4, 0))
+        tk.Label(ovr_frame, text="اصلاح توسط رادیولوژیست:", font=("Segoe UI", 7), fg=C_TEXT_MUTED, bg="#0f172a").pack(side=tk.LEFT)
+        for b_val in (1, 2, 3, 4, 5):
+            btn_b = tk.Button(ovr_frame, text=f"{b_val}", font=("Segoe UI", 7, "bold"),
+                              bg="#1e293b" if b_val != birads else b_col,
+                              fg=C_TEXT_LIGHT if b_val != birads else "white",
+                              bd=0, padx=4, pady=1, cursor="hand2",
+                              command=lambda v=b_val: self.override_mammo_birads(v))
+            btn_b.pack(side=tk.LEFT, padx=1)
 
         # Density Card
         d_card = tk.Frame(container, bg="#0f172a", bd=1, relief=tk.SOLID, highlightbackground=C_BORDER, padx=8, pady=6)
