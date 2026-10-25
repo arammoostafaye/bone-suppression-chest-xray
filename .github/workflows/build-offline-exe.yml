@@ -28,10 +28,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # CPU wheel on purpose: the CUDA wheels add ~2.5 GB of unused DLLs.
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install "opencv-python-headless>=4.8" "numpy>=1.24" "Pillow>=10" "pydicom>=2.4" "python-docx>=1.1" "cryptography>=41.0" pyinstaller
-          # NOTE: torchvision/gradio from the package requirements are not
-          # imported by BoneSuppression_Desktop.py, so they are skipped here.
 
       - name: Download model weights (bundled into the app for offline use)
         run: |
@@ -41,17 +39,19 @@ jobs:
           curl -L --retry 3 -o offline_package/weights/fracture_yolov8.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_yolov8.onnx
           curl -L --retry 3 -o offline_package/weights/fracture_ortho.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_ortho.onnx
           curl -L --retry 3 -o offline_package/weights/cxr_densenet18.ts https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/cxr_densenet18.ts
+          curl -L --retry 3 -o offline_package/weights/mammo_resnet50.pt https://huggingface.co/umairinayat/medical-models/resolve/main/disease_models/mammography/classification/best_classifier.pt
           Get-ChildItem offline_package/weights | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           if ((Get-Item offline_package/weights/bone_suppression.ts).Length -lt 400000000) { throw "bone weights incomplete" }
           if ((Get-Item offline_package/weights/lung_component_suppression.ts).Length -lt 400000000) { throw "lung weights incomplete" }
           if ((Get-Item offline_package/weights/fracture_yolov8.onnx).Length -lt 10000000) { throw "fracture weights incomplete" }
           if ((Get-Item offline_package/weights/cxr_densenet18.ts).Length -lt 25000000) { throw "pathology weights incomplete" }
+          if ((Get-Item offline_package/weights/mammo_resnet50.pt).Length -lt 80000000) { throw "mammo weights incomplete" }
 
       - name: Build with PyInstaller (package flags, verbatim)
         run: |
           cd offline_package
           # single line: the workflow shell is pwsh, where ^ is not a continuation
-          pyinstaller --noconfirm --onedir --windowed --name "BoneSuppressionAI" --add-data "weights;weights" --add-data "config.json;." --collect-all torch --collect-all cv2 --collect-all docx --collect-all cryptography BoneSuppression_Desktop.py
+          pyinstaller --noconfirm --onedir --windowed --name "BoneSuppressionAI" --add-data "weights;weights" --add-data "config.json;." --collect-all torch --collect-all torchvision --collect-all cv2 --collect-all docx --collect-all cryptography BoneSuppression_Desktop.py
           if (Test-Path "apply_update.bat") {
               Copy-Item "apply_update.bat" "dist\BoneSuppressionAI\" -Force
           }
@@ -66,11 +66,13 @@ jobs:
           if (-not (Test-Path "$i\weights\lung_component_suppression.ts")) { throw "lung weights not bundled" }
           if (-not (Test-Path "$i\weights\fracture_yolov8.onnx")) { throw "fracture weights not bundled" }
           if (-not (Test-Path "$i\weights\cxr_densenet18.ts")) { throw "pathology weights not bundled" }
+          if (-not (Test-Path "$i\weights\mammo_resnet50.pt")) { throw "mammo weights not bundled" }
           if (-not (Get-ChildItem $i -Recurse -Filter "tcl86t.dll" -ErrorAction SilentlyContinue)) { throw "tcl/tk runtime missing (tkinter UI would not start)" }
           python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop; print('APP IMPORT OK')"
           python -c "import sys; sys.path.insert(0,'offline_package'); import BoneSuppression_Desktop as b; app = b.BoneSuppressionApp(); app.update(); print('APP UI INITIALIZED OK')"
           @'
           import torch, cv2, numpy as np
+          from torchvision import models
           # 1. Test Bone Suppression
           b = torch.jit.load("offline_package/weights/bone_suppression.ts", map_location="cpu").eval()
           l = torch.jit.load("offline_package/weights/lung_component_suppression.ts", map_location="cpu").eval()
@@ -94,6 +96,17 @@ jobs:
           with torch.no_grad():
               pout = pnet(px)
           print("MODEL 3 (18 PATHOLOGIES DENSENET) OK", pout.shape)
+
+          # 4. Test Mammography ResNet-50
+          mckpt = torch.load("offline_package/weights/mammo_resnet50.pt", map_location="cpu", weights_only=False)
+          mnet = models.resnet50()
+          mnet.fc = torch.nn.Linear(mnet.fc.in_features, len(mckpt["class_names"]))
+          mnet.load_state_dict(mckpt["model_state"])
+          mnet.eval()
+          mx = torch.rand(1, 3, 224, 224)
+          with torch.no_grad():
+              mout = mnet(mx)
+          print("MODEL 4 (MAMMOGRAPHY RESNET-50) OK", mout.shape)
           '@ | Set-Content probe.py
           python probe.py
 

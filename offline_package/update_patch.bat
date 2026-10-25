@@ -1,16 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Patch Updater (v2.8.2)
+title BoneSuppression AI - Multi-AI Patch Updater (v2.8.3)
 color 0f
 
-set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.2/BoneSuppressionAI-v2.8.2-Update-Only.zip"
-set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.8.2-Update-Only.zip"
+set "URL1=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/download/v2.8.3/BoneSuppressionAI-v2.8.3-Update-Only.zip"
+set "URL2=https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/BoneSuppressionAI-v2.8.3-Update-Only.zip"
 set "URL3=https://github.com/arammoostafaye/bone-suppression-chest-xray/releases/latest/download/BoneSuppressionAI-Update-Only.zip"
-set "OUT=%~dp0BoneSuppressionAI-v2.8.2-Update-Only.zip"
+set "OUT=%~dp0BoneSuppressionAI-v2.8.3-Update-Only.zip"
 
 echo ======================================================================
-echo   پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.2)
-echo   توسعه‌دهنده: آرام مصطفائی | دانلود مستقیم دایکام و حذف JPGهای کند پکس
+echo   پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.3)
+echo   توسعه‌دهنده: آرام مصطفائی | هوش مصنوعی عمیق ماموگرافی (ResNet-50)
 echo ======================================================================
 echo.
 echo  در حال دریافت پکیج سبک آپدیت (~280 مگابایت)...

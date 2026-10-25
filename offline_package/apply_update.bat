@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title BoneSuppression AI - Multi-AI Quick Updater (v2.8.2)
+title BoneSuppression AI - Multi-AI Quick Updater (v2.8.3)
 color 0f
 
 echo ======================================================================
@@ -60,7 +60,10 @@ echo [✓] انتقال وزن‌های قبلی با موفقیت انجام ش
 echo.
 
 :check_new_models
-echo [✓] بررسی مدل‌های جدید شکستگی و ۱۸ بیماری ریه...
+echo [✓] بررسی مدل‌های جدید ماموگرافی، شکستگی و بیماری‌های ریه...
+if not exist "%TARGET_DIR%\mammo_resnet50.pt" (
+    if exist "%~dp0weights\mammo_resnet50.pt" copy /y "%~dp0weights\mammo_resnet50.pt" "%TARGET_DIR%\" >nul
+)
 if not exist "%TARGET_DIR%\fracture_ortho.onnx" (
     if exist "%~dp0weights\fracture_ortho.onnx" copy /y "%~dp0weights\fracture_ortho.onnx" "%TARGET_DIR%\" >nul
 )
@@ -73,7 +76,7 @@ if not exist "%TARGET_DIR%\cxr_densenet18.ts" (
 
 :launch
 echo ======================================================================
-echo اجرای پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.2)...
+echo اجرای پلتفرم تخصصی هوش مصنوعی رادیولوژی بیمارستان بوعلی مریوان (v2.8.3)...
 echo ======================================================================
 if exist "%~dp0BoneSuppressionAI.exe" (
     start "" "%~dp0BoneSuppressionAI.exe"
