@@ -39,7 +39,7 @@ jobs:
           curl -L --retry 3 -o offline_package/weights/fracture_yolov8.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_yolov8.onnx
           curl -L --retry 3 -o offline_package/weights/fracture_ortho.onnx https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/fracture_ortho.onnx
           curl -L --retry 3 -o offline_package/weights/cxr_densenet18.ts https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/cxr_densenet18.ts
-          curl -L --retry 3 -o offline_package/weights/mammo_resnet50.pt https://huggingface.co/umairinayat/medical-models/resolve/main/disease_models/mammography/classification/best_classifier.pt
+          curl -L --retry 3 -o offline_package/weights/mammo_resnet50.pt https://huggingface.co/arammoostafaye/bone-suppression-desktop/resolve/main/weights/mammo_resnet50.pt
           Get-ChildItem offline_package/weights | ForEach-Object { Write-Host ("{0} {1} bytes" -f $_.Name, $_.Length) }
           if ((Get-Item offline_package/weights/bone_suppression.ts).Length -lt 400000000) { throw "bone weights incomplete" }
           if ((Get-Item offline_package/weights/lung_component_suppression.ts).Length -lt 400000000) { throw "lung weights incomplete" }
