@@ -337,7 +337,7 @@ class ClinicalReportModal(tk.Toplevel):
         self.birads_override_frame = tk.Frame(control_frame, bg="#0d1424")
         self.birads_override_frame.pack(fill=tk.X, pady=(4, 0))
 
-        curr_b = self.app_state.get("mammo_summary", {}).get("overall_birads") or self.app_state.get("mammo", {}).get("birads", 1)
+        curr_b = (self.app_state.get("mammo_summary") or {}).get("overall_birads") or (self.app_state.get("mammo") or {}).get("birads", 1)
         self.selected_birads = tk.IntVar(value=curr_b)
 
         tk.Label(self.birads_override_frame, text="رده‌بندی بالینی BI-RADS (تایید یا اصلاح توسط رادیولوژیست):",
@@ -3167,9 +3167,17 @@ class BoneSuppressionApp(tk.Tk):
             bgr = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if bgr is None:
                 raise ValueError("cv2 قادر به خواندن این فایل نیست.")
+            h, w = bgr.shape
+            if max(h, w) > 2800:
+                sc = 2800.0 / float(max(h, w))
+                bgr = cv2.resize(bgr, (int(w * sc), int(h * sc)), interpolation=cv2.INTER_AREA)
             arr = bgr.astype(np.float32) / 255.0
         else:
             p = Image.open(path).convert("L")
+            w, h = p.size
+            if max(h, w) > 2800:
+                sc = 2800.0 / float(max(h, w))
+                p = p.resize((int(w * sc), int(h * sc)), Image.Resampling.BILINEAR)
             arr = np.array(p, dtype=np.float32) / 255.0
 
         if self.auto_invert_var.get() and self.looks_inverted(arr):
@@ -3320,16 +3328,17 @@ class BoneSuppressionApp(tk.Tk):
             self.canvas.delete("all")
             self.canvas.create_image(ox, oy, anchor=tk.NW, image=self.tk_img)
 
-            line_x = ox + split_x
-            self.canvas.create_line(line_x, oy, line_x, oy + nh, fill=C_CYAN, width=2)
-            self.canvas.create_oval(line_x - 10, oy + nh // 2 - 10, line_x + 10, oy + nh // 2 + 10,
-                                   fill=C_CYAN, outline="#ffffff", width=2)
+            if self.soft_np is not None and self.active_ai_module.get() == "suppress":
+                line_x = ox + split_x
+                self.canvas.create_line(line_x, oy, line_x, oy + nh, fill=C_CYAN, width=2)
+                self.canvas.create_oval(line_x - 10, oy + nh // 2 - 10, line_x + 10, oy + nh // 2 + 10,
+                                       fill=C_CYAN, outline="#ffffff", width=2)
 
-            self.canvas.create_rectangle(ox + 10, oy + 10, ox + 175, oy + 38, fill="#0b0f19", outline=C_BORDER)
-            self.canvas.create_text(ox + 18, oy + 17, text="تصویر اصلی (Original)", fill="white", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
+                self.canvas.create_rectangle(ox + 10, oy + 10, ox + 175, oy + 38, fill="#0b0f19", outline=C_BORDER)
+                self.canvas.create_text(ox + 18, oy + 17, text="تصویر اصلی (Original)", fill="white", anchor=tk.NW, font=("Segoe UI", 9, "bold"))
 
-            self.canvas.create_rectangle(ox + nw - 200, oy + 10, ox + nw - 10, oy + 38, fill="#0b0f19", outline=C_BORDER)
-            self.canvas.create_text(ox + nw - 192, oy + 17, text="حذف استخوان (Soft Tissue)", fill=C_CYAN, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
+                self.canvas.create_rectangle(ox + nw - 200, oy + 10, ox + nw - 10, oy + 38, fill="#0b0f19", outline=C_BORDER)
+                self.canvas.create_text(ox + nw - 192, oy + 17, text="حذف استخوان (Soft Tissue)", fill=C_CYAN, anchor=tk.NW, font=("Segoe UI", 9, "bold"))
 
             # Overlay Fracture Boxes if active
             if self.active_ai_module.get() == "fracture" and self.show_fracture_boxes.get() and self.fracture_findings:
@@ -4164,22 +4173,22 @@ class BoneSuppressionApp(tk.Tk):
         # Erode slightly (avoid skin-air boundary artifacts)
         inner_mask = cv2.erode(breast_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
 
-        # 3. Calibrated breast parenchyma density
+        # 3. Calibrated breast parenchyma density (ACR BI-RADS 5th Edition Standard)
         breast_vals = clean[inner_mask > 0]
         if len(breast_vals) > 0:
             p5 = float(np.percentile(breast_vals, 5))
             p95 = float(np.percentile(breast_vals, 95))
-            # Adaptive threshold separating adipose baseline from fibroglandular parenchyma
-            dense_thresh = max(70, int(p5 + 0.30 * (p95 - p5)))
+            # Dynamic threshold calibrated to breast parenchyma dynamic range (adipose vs fibroglandular)
+            dense_thresh = p5 + 0.20 * (p95 - p5)
             dense_ratio = float(np.sum(breast_vals > dense_thresh)) / float(len(breast_vals))
         else:
             dense_ratio = 0.10
 
-        if dense_ratio < 0.22:
+        if dense_ratio < 0.25:
             density_comp = "a"
-        elif dense_ratio < 0.48:
+        elif dense_ratio < 0.50:
             density_comp = "b"
-        elif dense_ratio < 0.72:
+        elif dense_ratio < 0.75:
             density_comp = "c"
         else:
             density_comp = "d"
